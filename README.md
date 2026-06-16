@@ -1,28 +1,131 @@
 # MediaScribe
 
-MediaScribe is a PowerShell-based transcription and caption-file tool for local audio and video files.
+MediaScribe is a local Windows transcription tool that creates transcripts and caption files from audio/video files.
 
-It uses FFmpeg to extract audio and Whisper to create transcripts and optional caption/subtitle outputs.
+It uses:
 
-MediaScribe is designed around a simple folder workflow:
+* FFmpeg to extract audio
+* OpenAI Whisper to create transcripts and optional caption/subtitle files
+* PowerShell for the current command-line engine and setup workflow
 
-- Put files into `Input`
-- Run `transcribe.ps1`
-- Get results in `Output`
+MediaScribe is currently PowerShell-based. A GUI is planned for a future version.
+
+## Basic Idea
+
+MediaScribe uses a simple folder workflow:
+
+Put files into Input
+Run MediaScribe
+Get results in Output
+
+
+## Recommended User Flow
+
+Normal users should not need to run the long PowerShell command manually.
+
+The intended flow is:
+
+Download / USB / Desktop folder
+  Install.bat or Install-MediaScribe.bat
+    runs setup.ps1
+      creates installed MediaScribe folder
+        MediaScribe.bat
+          runs transcribe.ps1
+
+
+## Install MediaScribe
+
+Open the folder where you downloaded, extracted, or copied MediaScribe.
+
+This might be:
+
+USB drive
+Downloads folder
+Desktop folder
+Extracted ZIP folder
+Project folder
+
+
+Double-click:
+
+Install.bat
+
+
+or:
+
+Install-MediaScribe.bat
+
+
+The installer launcher starts PowerShell and runs:
+
+setup.ps1
+
+
+The setup script will ask where to install MediaScribe.
+
+The default install location is usually:
+
+Documents\MediaScribe
+
+
+Setup creates the installed MediaScribe folder and copies the needed files there.
+
+## Installed Folder
+
+After setup, the installed MediaScribe folder should look like this:
+
+MediaScribe/
+  Input/
+  Output/
+  Logs/
+  Models/
+  Tools/
+  config.json
+  How to Start transcription.txt
+  MediaScribe.bat
+  README.md
+  transcribe.ps1
+
+## Start MediaScribe After Installation
+
+After MediaScribe is installed, open the installed MediaScribe folder.
+
+Then double-click:
+
+MediaScribe.bat
+
+
+You can also run it from PowerShell:
+
+.\MediaScribe.bat
+
+
+`MediaScribe.bat` starts the installed copy of `transcribe.ps1`.
+
+## Developer / Workspace Start
+
+When testing directly from the project workspace, you can run:
+
+.\Start-MediaScribe.bat
+
+or run the PowerShell script directly:
+
+powershell -NoProfile -ExecutionPolicy Bypass -File .\transcribe.ps1
+
+This direct command is mainly for development and testing.
+
+Normal users should use the installer launcher first, then use `MediaScribe.bat` from the installed folder.
 
 ## What MediaScribe Creates
-
-MediaScribe creates transcripts and caption files from audio/video files.
 
 ### Default Output
 
 Default mode creates:
 
-```text
 Original file
 WAV audio
 TXT transcript
-```
+
 
 This is recommended for most users.
 
@@ -30,7 +133,6 @@ This is recommended for most users.
 
 Full mode creates:
 
-```text
 Original file
 WAV audio
 TXT transcript
@@ -38,7 +140,7 @@ SRT subtitle file
 VTT subtitle file
 TSV timing file
 JSON Whisper output
-```
+
 
 Use Full mode when subtitle/caption files or detailed Whisper output are needed.
 
@@ -46,35 +148,11 @@ Use Full mode when subtitle/caption files or detailed Whisper output are needed.
 
 Use `SRT` or `VTT` files for video caption/subtitle workflows.
 
-## Current Status
-
-This is currently the PowerShell engine version of the project.
-
-Planned future improvements may include:
-
-- Setup script
-- Simple GUI launcher
-- More polished desktop app or installer
-
 ## Project Folders
-
-```text
-MediaScribe/
-  Input/
-  Output/
-  Logs/
-  Models/
-  config.json
-  transcribe.ps1
-  README.md
-  How to Start transcription.txt
-```
-
-## Folder Purpose
 
 ### Input
 
-Put supported audio or video files here before running the script.
+Put supported audio or video files here before running MediaScribe.
 
 ### Output
 
@@ -84,59 +162,67 @@ Each processed file gets its own output folder.
 
 Example:
 
-```text
 Output/
   My Recording/
     My Recording.mp3
     My Recording.wav
     My Recording.txt
-```
+
 
 ### Logs
 
-Reserved for future logging support.
+Reserved for logging support.
 
 ### Models
 
-Reserved for future model-related support.
+Reserved for model-related support.
+
+### Tools
+
+Reserved for bundled tools.
+
+If FFmpeg is bundled later, the local FFmpeg path will be:
+
+Tools\ffmpeg\ffmpeg.exe
+
+
+MediaScribe currently prefers local bundled FFmpeg if present, then falls back to system FFmpeg from PATH.
 
 ## Supported Input Formats
 
 Recognized video files:
 
-```text
 MP4, MKV, MOV, M4V, AVI, WEBM
-```
+
 
 Recognized audio files:
 
-```text
 MP3, M4A, WAV, AAC, FLAC, OGG, OPUS, WMA
-```
+
 
 DRM-protected or damaged media files may fail.
 
-## Basic Use
+## Basic Use After Installation
 
-1. Place one or more supported files into the `Input` folder.
-2. Run `transcribe.ps1` with PowerShell.
-3. Press Enter to start.
-4. Choose a file number, or choose `B` to process all files.
-5. Choose an output mode.
-6. Choose Fast or Accurate transcription mode.
-7. Review the results in the `Output` folder.
+1. Open the installed MediaScribe folder.
+2. Put one or more supported files into the `Input` folder.
+3. Double-click `MediaScribe.bat`.
+4. Press Enter to start.
+5. Choose a file number, or choose `B` to process all files.
+6. Choose an output mode.
+7. Choose Fast or Accurate transcription mode.
+8. Review the results in the `Output` folder.
 
 ## File Selection
 
-When files are found, the script shows a menu like this:
+When files are found, MediaScribe shows a menu like this:
 
-```text
 Recognized files found:
   [1] First file.mp4
   [2] Second file.mp3
   [B] Process all files
   [Q] Quit
-```
+
 
 Choose a number to process one file.
 
@@ -150,11 +236,10 @@ Choose `Q` to quit.
 
 Default mode creates:
 
-```text
 Original file
 WAV audio file
 TXT transcript
-```
+
 
 This is recommended for most users.
 
@@ -162,7 +247,6 @@ This is recommended for most users.
 
 Full mode creates:
 
-```text
 Original file
 WAV audio file
 TXT transcript
@@ -170,7 +254,7 @@ SRT subtitle file
 VTT subtitle file
 TSV timing file
 JSON Whisper output
-```
+
 
 Use Full mode when caption/subtitle files or detailed Whisper output are needed.
 
@@ -194,68 +278,165 @@ Each file is processed one at a time.
 
 Each file gets its own output folder.
 
-At the end, the script shows a batch summary.
+At the end, MediaScribe shows a batch summary.
 
 Example:
 
-```text
 Batch complete.
 
-  ✅ First file.mp4
-  ✅ Second file.mp3
+  [OK] First file.mp4
+  [OK] Second file.mp3
 
 Output folder:
   Output
-```
+
 
 ## Run Again / Refresh
 
-After processing finishes, the script asks what to do next:
+After processing finishes, MediaScribe asks what to do next:
 
-```text
 [R] Run again / return to file list
 [O] Open output folder
 [Q] Quit
-```
+
 
 Pressing Enter quits.
 
-If no files are found, the script shows:
+If no files are found, MediaScribe shows:
 
-```text
 [R] Refresh / check again
 [O] Open Input folder
 [Q] Quit
-```
 
-Pressing Enter refreshes. This lets you drop more files into the `Input` folder without restarting the script.
+
+Pressing Enter refreshes. This lets you drop more files into the `Input` folder without restarting MediaScribe.
+
+## Dependencies
+
+MediaScribe needs:
+
+Python
+OpenAI Whisper
+FFmpeg
+
+
+The setup script checks for these dependencies.
+
+### FFmpeg Lookup
+
+MediaScribe looks for FFmpeg in this order:
+
+
+1. Local Tools\ffmpeg\ffmpeg.exe
+2. System ffmpeg from PATH
+
+
+### Whisper Lookup
+
+MediaScribe looks for Whisper in this order:
+
+
+1. python -m whisper
+2. Global whisper.exe / whisper command
+
+
+This lets MediaScribe work with either local/bundled tools or existing global installs.
 
 ## Configuration
 
-The script reads settings from `config.json`.
+MediaScribe reads settings from `config.json`.
 
-Current example:
+Example installed config:
 
-```json
+json
 {
   "AppName": "MediaScribe",
-  "BaseFolder": "D:\\CodexTests\\TranscribeTool-Codex",
-  "InputFolder": "D:\\CodexTests\\TranscribeTool-Codex\\Input",
-  "OutputFolder": "D:\\CodexTests\\TranscribeTool-Codex\\Output",
-  "LogsFolder": "D:\\CodexTests\\TranscribeTool-Codex\\Logs",
-  "ModelsFolder": "D:\\CodexTests\\TranscribeTool-Codex\\Models",
+  "BaseFolder": "D:\\Documents\\MediaScribe",
+  "InputFolder": "D:\\Documents\\MediaScribe\\Input",
+  "OutputFolder": "D:\\Documents\\MediaScribe\\Output",
+  "LogsFolder": "D:\\Documents\\MediaScribe\\Logs",
+  "ModelsFolder": "D:\\Documents\\MediaScribe\\Models",
   "DefaultModel": "medium",
   "DefaultLanguage": "en",
   "OutputMode": "default",
   "MoveInputFolderFilesAfterProcessing": true,
   "ExternalFileArchiveBehavior": "LeaveOriginalInPlace"
 }
-```
+
+## Configuration Fields
+
+### AppName
+
+The app name shown in the startup banner.
+
+### BaseFolder
+
+The main installed MediaScribe folder.
+
+### InputFolder
+
+Where users place audio/video files before transcription.
+
+### OutputFolder
+
+Where MediaScribe saves transcripts, WAV files, captions, and archived originals.
+
+### LogsFolder
+
+Reserved for logs.
+
+### ModelsFolder
+
+Reserved for model-related support.
+
+### DefaultModel
+
+The default Whisper model.
+
+Current default:
+
+medium
+
+
+### DefaultLanguage
+
+The default transcription language.
+
+Current default:
+
+en
+
+
+### OutputMode
+
+The default output mode.
+
+Supported values:
+
+default
+full
+
+
+### MoveInputFolderFilesAfterProcessing
+
+When true, files placed inside the Input folder are moved into their output/job folder after processing.
+
+### ExternalFileArchiveBehavior
+
+Controls future behavior for files processed from outside the Input folder.
+
+Currently supported behavior:
+
+LeaveOriginalInPlace
+
 
 ## Notes
 
-- FFmpeg extracts audio only.
-- Audio is converted to mono 16 kHz WAV for consistency.
-- Files inside the `Input` folder are moved into their output job folder after processing.
-- External files used through parameter mode are left in place.
-- Generated output files are ignored by Git.
+* FFmpeg extracts audio only.
+* Audio is converted to mono 16 kHz WAV for consistency.
+* Files inside the `Input` folder are moved into their output job folder after processing.
+* External files used through parameter mode are left in place.
+* Generated output files are ignored by Git.
+* `Install.bat` or `Install-MediaScribe.bat` is for installation.
+* `MediaScribe.bat` is for daily use after installation.
+* `Start-MediaScribe.bat` is for workspace/developer testing.

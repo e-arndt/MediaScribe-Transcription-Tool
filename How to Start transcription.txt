@@ -2,23 +2,83 @@ MediaScribe - Quick Start
 
 MediaScribe creates transcripts and caption files from audio/video files.
 
-1. Put one or more audio or video files into the Input folder.
+There are two steps:
+
+1. Install MediaScribe
+2. Use MediaScribe
+
+============================================================
+
+1. INSTALL MEDIASCRIBE
+   ============================================================
+
+Open the folder where you downloaded or copied MediaScribe.
+
+This might be a USB drive, Downloads folder, Desktop folder, or extracted ZIP folder.
+
+In that folder, double-click:
+
+Install.bat
+
+or:
+
+Install-MediaScribe.bat
+
+The installer will start PowerShell and run setup.ps1 for you.
+
+During setup, choose where to install MediaScribe.
+
+The default install folder is usually:
+
+Documents\MediaScribe
+
+Setup will create the installed MediaScribe folder and these subfolders:
+
+Input
+Output
+Logs
+Models
+Tools
+
+Setup will also create:
+
+MediaScribe.bat
+
+That is the normal launcher you use after installation.
+
+============================================================
+2. USE MEDIASCRIBE
+==================
+
+After setup finishes, open the installed MediaScribe folder.
+
+Example:
+
+Documents\MediaScribe
+
+Put one or more audio or video files into the Input folder.
 
 Recognized video files:
+
 MP4, MKV, MOV, M4V, AVI, WEBM
 
 Recognized audio files:
+
 MP3, M4A, WAV, AAC, FLAC, OGG, OPUS, WMA
 
-2. Run transcribe.ps1 with PowerShell.
+Then start MediaScribe by double-clicking:
 
-You can usually right-click transcribe.ps1 and choose "Run with PowerShell."
+MediaScribe.bat
 
-3. Press Enter to start.
+You can also run it from PowerShell with:
 
-4. Choose what to transcribe.
+.\MediaScribe.bat
 
-If one or more files are found, MediaScribe will show a file list.
+============================================================
+3. CHOOSE WHAT TO TRANSCRIBE
+============================
+
+MediaScribe will show a list of recognized files.
 
 Example:
 
@@ -27,39 +87,76 @@ Example:
 [B] Process all files
 [Q] Quit
 
-Choose a file number to process one file, or choose B to process all files.
+Choose a file number to process one file.
 
-5. Choose output files.
+Choose B to process all files.
 
-[D] Default - original file, WAV audio, TXT transcript
-[F] Full - original file, WAV audio, TXT, SRT, VTT, TSV, JSON
+Choose Q to quit.
+
+============================================================
+4. CHOOSE OUTPUT FILES
+======================
+
+MediaScribe will ask what output files you want.
+
+[D] Default - original file, WAV, TXT transcript
+[F] Full - original file, WAV, TXT, SRT, VTT, TSV, JSON
 
 Default mode is recommended for most users.
 
 Use Full mode when you need caption/subtitle files or detailed Whisper output.
 
 Caption use:
+
 Use SRT or VTT files for video caption/subtitle workflows.
 
-6. Choose transcription mode.
+============================================================
+5. CHOOSE TRANSCRIPTION MODE
+============================
+
+MediaScribe will ask which transcription mode to use.
 
 [F] Fast - quicker; good for most audio
 [A] Accurate - slower; better if Fast misses words; more compute / larger model
 
 Pressing Enter uses Fast mode.
 
-7. Find results in the Output folder.
+============================================================
+6. FIND RESULTS
+===============
+
+Results are saved in the Output folder.
 
 Each file gets its own output folder.
 
 Example:
 
-Output\My Recording\
-  My Recording.mp3
-  My Recording.wav
-  My Recording.txt
+Output\My Recording
+My Recording.mp3
+My Recording.wav
+My Recording.txt
 
-8. After processing finishes, choose what to do next.
+In Default mode, MediaScribe creates:
+
+Original file
+WAV audio
+TXT transcript
+
+In Full mode, MediaScribe creates:
+
+Original file
+WAV audio
+TXT transcript
+SRT subtitle file
+VTT subtitle file
+TSV timing file
+JSON Whisper output
+
+============================================================
+7. AFTER PROCESSING
+===================
+
+After processing finishes, MediaScribe asks what to do next.
 
 [R] Run again / return to file list
 [O] Open output folder
@@ -75,7 +172,16 @@ If no files are found, you can add files to the Input folder and choose Refresh.
 
 Pressing Enter refreshes.
 
-Notes:
+============================================================
+NOTES
+=====
+
 DRM/protected media may fail.
+
 Audio is extracted only and converted to mono 16 kHz WAV for consistency.
+
 Files inside the Input folder are moved into their output folder after processing.
+
+The Install.bat or Install-MediaScribe.bat file is only used to install MediaScribe.
+
+After installation, use MediaScribe.bat from the installed MediaScribe folder.
