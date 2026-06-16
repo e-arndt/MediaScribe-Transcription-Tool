@@ -2,7 +2,8 @@
 MediaScribe Setup Script
 
 Creates or repairs a local MediaScribe install folder, copies the app files,
-generates a clean config.json, creates a launcher, and checks dependencies.
+generates a clean config.json, creates a launcher, copies bundled dependencies,
+and checks/assists with required dependencies.
 
 This installer is designed for normal Windows users and does not require admin rights.
 
@@ -11,6 +12,16 @@ Install / repair policy:
 - Existing files inside Input, Output, Logs, Models, and Tools are preserved.
 - Core app files may be replaced during install or repair.
 - config.json is regenerated for the selected install folder.
+
+Dependency policy:
+- FFmpeg is copied from Dependencies\FFmpeg if present.
+- Python is checked first.
+- If Python is missing, setup can launch a bundled Python installer.
+- pip is checked only after Python is available.
+- If pip is missing, setup can run python -m ensurepip --upgrade.
+- Whisper is checked only after Python/pip are available.
+- If Whisper is missing, setup can run python -m pip install -U openai-whisper.
+- Each dependency step waits for the previous step to finish.
 #>
 
 $ErrorActionPreference = "Stop"
@@ -58,6 +69,21 @@ function Write-Fail {
     Write-Host "[MISSING] $Message" -ForegroundColor Red
 }
 
+function Ask-YesNo {
+    param (
+        [string]$Prompt,
+        [string]$Default = "Y"
+    )
+
+    $choice = Read-Host $Prompt
+
+    if ([string]::IsNullOrWhiteSpace($choice)) {
+        $choice = $Default
+    }
+
+    return ($choice.Trim().ToUpper() -eq "Y")
+}
+
 function Copy-AppFile {
     param (
         [string]$SourcePath,
@@ -85,6 +111,25 @@ function Test-CommandExists {
 
     $found = Get-Command $Command -ErrorAction SilentlyContinue
     return $null -ne $found
+}
+
+function Update-ProcessPathFromRegistry {
+    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+
+    $combinedPathParts = @()
+
+    if (-not [string]::IsNullOrWhiteSpace($machinePath)) {
+        $combinedPathParts += $machinePath
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($userPath)) {
+        $combinedPathParts += $userPath
+    }
+
+    if ($combinedPathParts.Count -gt 0) {
+        $env:Path = ($combinedPathParts -join ";")
+    }
 }
 
 function Select-InstallFolder {
@@ -146,7 +191,216 @@ function Select-InstallFolder {
     }
 }
 
+function Resolve-PythonCommand {
+    Update-ProcessPathFromRegistry
+
+    $pythonCommand = Get-Command "python" -ErrorAction SilentlyContinue
+
+    if ($null -ne $pythonCommand) {
+        try {
+            $versionOutput = & $pythonCommand.Source --version 2>&1
+
+            if ($LASTEXITCODE -eq 0 -and "$versionOutput" -match "Python") {
+                return [pscustomobject]@{
+                    Available = $true
+                    Command   = $pythonCommand.Source
+                    Version   = "$versionOutput"
+                    Method    = "python command"
+                }
+            }
+        } catch {
+            # Continue to fallback checks.
+        }
+    }
+
+    $possiblePythonRoots = @(
+        (Join-Path $env:LocalAppData "Programs\Python"),
+        "C:\Program Files\Python313",
+        "C:\Program Files\Python314",
+        "C:\Program Files\Python312"
+    )
+
+    foreach ($root in $possiblePythonRoots) {
+        if (-not (Test-Path -LiteralPath $root)) {
+            continue
+        }
+
+        $pythonExe = Get-ChildItem -LiteralPath $root -Filter "python.exe" -Recurse -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+
+        if ($null -ne $pythonExe) {
+            try {
+                $versionOutput = & $pythonExe.FullName --version 2>&1
+
+                if ($LASTEXITCODE -eq 0 -and "$versionOutput" -match "Python") {
+                    return [pscustomobject]@{
+                        Available = $true
+                        Command   = $pythonExe.FullName
+                        Version   = "$versionOutput"
+                        Method    = "located python.exe"
+                    }
+                }
+            } catch {
+                # Continue.
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        Available = $false
+        Command   = $null
+        Version   = "not found"
+        Method    = "not found"
+    }
+}
+
+function Find-BundledPythonInstaller {
+    param (
+        [string]$ScriptRoot
+    )
+
+    $pythonDependencyFolder = Join-Path $ScriptRoot "Dependencies\Python"
+
+    if (-not (Test-Path -LiteralPath $pythonDependencyFolder -PathType Container)) {
+        return $null
+    }
+
+    $preferredInstaller = Get-ChildItem -LiteralPath $pythonDependencyFolder -Filter "python-3.13*-amd64.exe" -File -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending |
+        Select-Object -First 1
+
+    if ($null -ne $preferredInstaller) {
+        return $preferredInstaller.FullName
+    }
+
+    $anyInstaller = Get-ChildItem -LiteralPath $pythonDependencyFolder -Filter "python-*-amd64.exe" -File -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending |
+        Select-Object -First 1
+
+    if ($null -ne $anyInstaller) {
+        return $anyInstaller.FullName
+    }
+
+    return $null
+}
+
+function Install-BundledPython {
+    param (
+        [string]$PythonInstaller
+    )
+
+    Write-Section "Installing Python"
+
+    Write-Host "Bundled Python installer:"
+    Write-Host "  $PythonInstaller"
+    Write-Host ""
+    Write-Host "Python will be installed for the current user with pip enabled."
+    Write-Host "This step may take a few minutes."
+    Write-Host ""
+
+    $installPython = Ask-YesNo -Prompt "Install bundled Python now? (Y/N, default Y)" -Default "Y"
+
+    if (-not $installPython) {
+        Write-Warn "Python install skipped by user."
+        return $false
+    }
+
+    $pythonArgs = @(
+        "/passive",
+        "InstallAllUsers=0",
+        "PrependPath=1",
+        "Include_pip=1",
+        "Include_launcher=1",
+        "Include_test=0"
+    )
+
+    try {
+        $process = Start-Process -FilePath $PythonInstaller -ArgumentList $pythonArgs -Wait -PassThru
+
+        if ($process.ExitCode -eq 0) {
+            Write-Ok "Bundled Python installer finished."
+            Update-ProcessPathFromRegistry
+            return $true
+        }
+
+        Write-Warn "Python installer exited with code $($process.ExitCode)."
+        return $false
+    } catch {
+        Write-Warn "Python installer failed: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Test-PipAvailable {
+    param (
+        [string]$PythonCommand
+    )
+
+    if ([string]::IsNullOrWhiteSpace($PythonCommand)) {
+        return [pscustomobject]@{
+            Available = $false
+            Version   = "not found"
+        }
+    }
+
+    try {
+        $pipVersion = & $PythonCommand -m pip --version 2>&1
+
+        if ($LASTEXITCODE -eq 0) {
+            return [pscustomobject]@{
+                Available = $true
+                Version   = "$pipVersion"
+            }
+        }
+    } catch {
+        # Continue to not found result.
+    }
+
+    return [pscustomobject]@{
+        Available = $false
+        Version   = "not found"
+    }
+}
+
+function Install-PipWithEnsurePip {
+    param (
+        [string]$PythonCommand
+    )
+
+    Write-Section "Installing pip"
+
+    if ([string]::IsNullOrWhiteSpace($PythonCommand)) {
+        Write-Warn "Cannot install pip because Python is not available."
+        return $false
+    }
+
+    Write-Host "pip was not found."
+    Write-Host "Setup will try to enable pip using:"
+    Write-Host "  python -m ensurepip --upgrade"
+    Write-Host ""
+
+    try {
+        & $PythonCommand -m ensurepip --upgrade
+
+        if ($LASTEXITCODE -eq 0) {
+            Write-Ok "pip install/repair finished."
+            return $true
+        }
+
+        Write-Warn "ensurepip exited with code $LASTEXITCODE."
+        return $false
+    } catch {
+        Write-Warn "ensurepip failed: $($_.Exception.Message)"
+        return $false
+    }
+}
+
 function Find-WhisperCommand {
+    param (
+        [string]$PythonCommand
+    )
+
     $globalWhisper = Get-Command "whisper" -ErrorAction SilentlyContinue
 
     if ($null -ne $globalWhisper) {
@@ -163,10 +417,9 @@ function Find-WhisperCommand {
         # Continue to Python Scripts fallback.
     }
 
-    if (Test-CommandExists -Command "python") {
+    if (-not [string]::IsNullOrWhiteSpace($PythonCommand) -and (Test-Path -LiteralPath $PythonCommand -PathType Leaf)) {
         try {
-            $pythonExe = (Get-Command python).Source
-            $pythonFolder = Split-Path $pythonExe -Parent
+            $pythonFolder = Split-Path $PythonCommand -Parent
 
             $possibleWhisperPaths = @(
                 (Join-Path $pythonFolder "Scripts\whisper.exe"),
@@ -188,12 +441,16 @@ function Find-WhisperCommand {
 }
 
 function Test-PythonWhisper {
-    if (-not (Test-CommandExists -Command "python")) {
+    param (
+        [string]$PythonCommand
+    )
+
+    if ([string]::IsNullOrWhiteSpace($PythonCommand)) {
         return $false
     }
 
     try {
-        & python -m whisper --help *> $null
+        & $PythonCommand -m whisper --help *> $null
 
         if ($LASTEXITCODE -eq 0) {
             return $true
@@ -206,18 +463,22 @@ function Test-PythonWhisper {
 }
 
 function Test-WhisperAvailable {
+    param (
+        [string]$PythonCommand
+    )
+
     $result = [ordered]@{
         Available = $false
         Method    = "not found"
     }
 
-    if (Test-PythonWhisper) {
+    if (Test-PythonWhisper -PythonCommand $PythonCommand) {
         $result.Available = $true
         $result.Method = "python -m whisper"
         return $result
     }
 
-    $whisperPath = Find-WhisperCommand
+    $whisperPath = Find-WhisperCommand -PythonCommand $PythonCommand
 
     if (-not [string]::IsNullOrWhiteSpace($whisperPath)) {
         $result.Available = $true
@@ -226,6 +487,51 @@ function Test-WhisperAvailable {
     }
 
     return $result
+}
+
+function Install-WhisperWithPip {
+    param (
+        [string]$PythonCommand
+    )
+
+    Write-Section "Installing OpenAI Whisper"
+
+    if ([string]::IsNullOrWhiteSpace($PythonCommand)) {
+        Write-Warn "Cannot install Whisper because Python is not available."
+        return $false
+    }
+
+    Write-Host "OpenAI Whisper was not found."
+    Write-Host "Setup can try to install it with pip."
+    Write-Host ""
+    Write-Host "Command:"
+    Write-Host "  python -m pip install -U openai-whisper"
+    Write-Host ""
+    Write-Host "This may take several minutes and may download large packages."
+    Write-Host "An internet connection is required."
+    Write-Host ""
+
+    $installWhisper = Ask-YesNo -Prompt "Install OpenAI Whisper now? (Y/N, default Y)" -Default "Y"
+
+    if (-not $installWhisper) {
+        Write-Warn "Whisper install skipped by user."
+        return $false
+    }
+
+    try {
+        & $PythonCommand -m pip install -U openai-whisper
+
+        if ($LASTEXITCODE -eq 0) {
+            Write-Ok "OpenAI Whisper install finished."
+            return $true
+        }
+
+        Write-Warn "pip install openai-whisper exited with code $LASTEXITCODE."
+        return $false
+    } catch {
+        Write-Warn "Whisper install failed: $($_.Exception.Message)"
+        return $false
+    }
 }
 
 function Test-FFmpegAvailable {
@@ -263,58 +569,111 @@ function Test-FFmpegAvailable {
     return $result
 }
 
-function Invoke-DependencyCheck {
+function Invoke-DependencySetup {
     param (
-        [string]$InstallFolder
+        [string]$InstallFolder,
+        [string]$ScriptRoot
     )
 
     Write-Section "Dependency Check"
 
-    $pythonAvailable = Test-CommandExists -Command "python"
-    $pipAvailable = $false
+    # ---------------------------------------------------------
+    # Python
+    # ---------------------------------------------------------
+    $pythonCheck = Resolve-PythonCommand
 
-    if ($pythonAvailable) {
-        try {
-            $pythonVersion = & python --version 2>&1
-            Write-Ok "Python found: $pythonVersion"
-        } catch {
-            Write-Warn "Python command was found, but version check failed."
-        }
-
-        try {
-            $pipVersion = & python -m pip --version 2>&1
-
-            if ($LASTEXITCODE -eq 0) {
-                $pipAvailable = $true
-                Write-Ok "pip found: $pipVersion"
-            }
-        } catch {
-            $pipAvailable = $false
-        }
-
-        if (-not $pipAvailable) {
-            Write-Fail "pip was not found."
-            Write-Host "OpenAI Whisper usually requires pip for installation."
-        }
+    if ($pythonCheck.Available) {
+        Write-Ok "Python found through $($pythonCheck.Method): $($pythonCheck.Version)"
     } else {
         Write-Fail "Python was not found."
-        Write-Host "MediaScribe usually requires Python and OpenAI Whisper."
+        Write-Host "MediaScribe needs Python before pip or Whisper can be used."
+        Write-Host ""
+
+        $pythonInstaller = Find-BundledPythonInstaller -ScriptRoot $ScriptRoot
+
+        if (-not [string]::IsNullOrWhiteSpace($pythonInstaller)) {
+            $pythonInstalled = Install-BundledPython -PythonInstaller $pythonInstaller
+
+            if ($pythonInstalled) {
+                $pythonCheck = Resolve-PythonCommand
+
+                if ($pythonCheck.Available) {
+                    Write-Ok "Python found after install: $($pythonCheck.Version)"
+                } else {
+                    Write-Warn "Python installer finished, but setup could not find python in this session."
+                    Write-Host "You may need to close this window and run Install.bat again."
+                }
+            }
+        } else {
+            Write-Warn "No bundled Python installer was found in Dependencies\Python."
+        }
     }
 
-    $whisperCheck = Test-WhisperAvailable
-    $whisperAvailable = [bool]$whisperCheck.Available
-    $whisperMethod = [string]$whisperCheck.Method
+    # ---------------------------------------------------------
+    # pip
+    # ---------------------------------------------------------
+    $pipCheck = [pscustomobject]@{
+        Available = $false
+        Version   = "not found"
+    }
 
-    if ($whisperAvailable) {
-        Write-Ok "OpenAI Whisper found through $whisperMethod."
+    if ($pythonCheck.Available) {
+        $pipCheck = Test-PipAvailable -PythonCommand $pythonCheck.Command
+
+        if ($pipCheck.Available) {
+            Write-Ok "pip found: $($pipCheck.Version)"
+        } else {
+            $pipInstalled = Install-PipWithEnsurePip -PythonCommand $pythonCheck.Command
+
+            if ($pipInstalled) {
+                $pipCheck = Test-PipAvailable -PythonCommand $pythonCheck.Command
+
+                if ($pipCheck.Available) {
+                    Write-Ok "pip found after repair: $($pipCheck.Version)"
+                } else {
+                    Write-Warn "pip repair finished, but pip was still not found."
+                }
+            }
+        }
     } else {
-        Write-Fail "OpenAI Whisper was not found."
-        Write-Host "MediaScribe cannot transcribe until Whisper is installed."
-        Write-Host "Whisper lookup tried:"
-        Write-Host "  1. python -m whisper"
-        Write-Host "  2. global whisper.exe / whisper command"
+        Write-Warn "Skipping pip check because Python is not available."
     }
 
+    # ---------------------------------------------------------
+    # Whisper
+    # ---------------------------------------------------------
+    $whisperCheck = [ordered]@{
+        Available = $false
+        Method    = "not found"
+    }
+
+    if ($pythonCheck.Available -and $pipCheck.Available) {
+        $whisperCheck = Test-WhisperAvailable -PythonCommand $pythonCheck.Command
+
+        if ($whisperCheck.Available) {
+            Write-Ok "OpenAI Whisper found through $($whisperCheck.Method)."
+        } else {
+            $whisperInstalled = Install-WhisperWithPip -PythonCommand $pythonCheck.Command
+
+            if ($whisperInstalled) {
+                $whisperCheck = Test-WhisperAvailable -PythonCommand $pythonCheck.Command
+
+                if ($whisperCheck.Available) {
+                    Write-Ok "OpenAI Whisper found after install through $($whisperCheck.Method)."
+                } else {
+                    Write-Warn "Whisper install finished, but setup could not verify it."
+                }
+            }
+        }
+    } elseif ($pythonCheck.Available -and -not $pipCheck.Available) {
+        Write-Warn "Skipping Whisper install because pip is not available."
+    } else {
+        Write-Warn "Skipping Whisper check because Python is not available."
+    }
+
+    # ---------------------------------------------------------
+    # FFmpeg
+    # ---------------------------------------------------------
     $ffmpegCheck = Test-FFmpegAvailable -InstallFolder $InstallFolder
     $ffmpegAvailable = [bool]$ffmpegCheck.Available
     $ffmpegMethod = [string]$ffmpegCheck.Method
@@ -332,17 +691,23 @@ function Invoke-DependencyCheck {
         Write-Host "  2. system ffmpeg from PATH"
     }
 
+    $pythonAvailable = [bool]$pythonCheck.Available
+    $pipAvailable = [bool]$pipCheck.Available
+    $whisperAvailable = [bool]$whisperCheck.Available
+    $whisperMethod = [string]$whisperCheck.Method
+
     $allReady = $pythonAvailable -and $pipAvailable -and $whisperAvailable -and $ffmpegAvailable
 
     Write-Host ""
     Write-Host "Dependency Summary:"
-    Write-Host "  Python:  $pythonAvailable"
+    Write-Host "  Python:  $pythonAvailable ($($pythonCheck.Method))"
     Write-Host "  pip:     $pipAvailable"
     Write-Host "  Whisper: $whisperAvailable ($whisperMethod)"
     Write-Host "  FFmpeg:  $ffmpegAvailable ($ffmpegMethod)"
 
     return [pscustomobject]@{
         PythonAvailable  = $pythonAvailable
+        PythonCommand    = $pythonCheck.Command
         PipAvailable     = $pipAvailable
         WhisperAvailable = $whisperAvailable
         WhisperMethod    = $whisperMethod
@@ -465,16 +830,23 @@ $launcherContent | Set-Content -Path $launcherPath -Encoding ASCII
 
 Write-Ok "Created MediaScribe.bat"
 
-$sourceFfmpegFolder = Join-Path $scriptRoot "Tools\ffmpeg"
+$sourceFfmpegFolder = Join-Path $scriptRoot "Dependencies\FFmpeg"
 
 if (Test-Path -LiteralPath $sourceFfmpegFolder -PathType Container) {
-    Write-Section "Copying Bundled FFmpeg"
+    $ffmpegExeSource = Join-Path $sourceFfmpegFolder "ffmpeg.exe"
 
-    Copy-Item -Path (Join-Path $sourceFfmpegFolder "*") -Destination $ffmpegFolder -Recurse -Force
-    Write-Ok "Copied bundled FFmpeg files."
+    if (Test-Path -LiteralPath $ffmpegExeSource -PathType Leaf) {
+        Write-Section "Copying Bundled FFmpeg"
+
+        Copy-Item -Path (Join-Path $sourceFfmpegFolder "*") -Destination $ffmpegFolder -Recurse -Force
+        Write-Ok "Copied bundled FFmpeg files from Dependencies\FFmpeg."
+    } else {
+        Write-Warn "Dependencies\FFmpeg exists, but ffmpeg.exe was not found."
+        Write-Host "Setup will check for system FFmpeg during dependency check."
+    }
 }
 
-$dependencyResult = Invoke-DependencyCheck -InstallFolder $installFolder
+$dependencyResult = Invoke-DependencySetup -InstallFolder $installFolder -ScriptRoot $scriptRoot
 
 if ($dependencyResult.AllReady) {
     Write-Section "Setup Complete"
@@ -511,7 +883,7 @@ if ($dependencyResult.AllReady) {
     Write-Host "  OpenAI Whisper"
     Write-Host "  FFmpeg"
     Write-Host ""
-    Write-Host "After installing the missing dependencies, run Install.bat again to re-check setup."
+    Write-Host "After fixing the missing dependencies, run Install.bat again to re-check setup."
     Write-Host ""
 }
 
