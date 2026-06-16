@@ -113,6 +113,14 @@ function Test-CommandExists {
     return $null -ne $found
 }
 
+function Test-InternetAvailable {
+    try {
+        return [bool](Test-NetConnection -ComputerName "pypi.org" -Port 443 -InformationLevel Quiet -WarningAction SilentlyContinue)
+    } catch {
+        return $false
+    }
+}
+
 function Update-ProcessPathFromRegistry {
     $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
@@ -489,6 +497,7 @@ function Test-WhisperAvailable {
     return $result
 }
 
+
 function Install-WhisperWithPip {
     param (
         [string]$PythonCommand
@@ -502,21 +511,31 @@ function Install-WhisperWithPip {
     }
 
     Write-Host "OpenAI Whisper was not found."
-    Write-Host "Setup can try to install it with pip."
-    Write-Host ""
-    Write-Host "Command:"
-    Write-Host "  python -m pip install -U openai-whisper"
-    Write-Host ""
-    Write-Host "This may take several minutes and may download large packages."
-    Write-Host "An internet connection is required."
+    Write-Host "Setup can install it with pip. Internet is required."
     Write-Host ""
 
     $installWhisper = Ask-YesNo -Prompt "Install OpenAI Whisper now? (Y/N, default Y)" -Default "Y"
 
     if (-not $installWhisper) {
-        Write-Warn "Whisper install skipped by user."
+        Write-Warn "Whisper install skipped."
         return $false
     }
+
+    Write-Host "Checking internet access..."
+
+    if (-not (Test-InternetAvailable)) {
+        Write-Warn "Internet check failed. Whisper install may not work."
+
+        $tryAnyway = Ask-YesNo -Prompt "Try anyway? (Y/N, default Y)" -Default "Y"
+
+        if (-not $tryAnyway) {
+            Write-Warn "Whisper install skipped."
+            return $false
+        }
+    }
+
+    Write-Host "Installing Whisper. This may take several minutes..."
+    Write-Host ""
 
     try {
         & $PythonCommand -m pip install -U openai-whisper
@@ -526,10 +545,10 @@ function Install-WhisperWithPip {
             return $true
         }
 
-        Write-Warn "pip install openai-whisper exited with code $LASTEXITCODE."
+        Write-Warn "Whisper install failed. Check internet connection and run Install.bat again."
         return $false
     } catch {
-        Write-Warn "Whisper install failed: $($_.Exception.Message)"
+        Write-Warn "Whisper install failed. Run Install.bat again later."
         return $false
     }
 }
