@@ -1,0 +1,13 @@
+{
+  "AppName": "MediaScribe",
+  "BaseFolder": "D:\\CodexTests\\TranscribeTool-Codex",
+  "InputFolder": "D:\\CodexTests\\TranscribeTool-Codex\\Input",
+  "OutputFolder": "D:\\CodexTests\\TranscribeTool-Codex\\Output",
+  "LogsFolder": "D:\\CodexTests\\TranscribeTool-Codex\\Logs",
+  "ModelsFolder": "D:\\CodexTests\\TranscribeTool-Codex\\Models",
+  "DefaultModel": "medium",
+  "DefaultLanguage": "en",
+  "OutputMode": "default",
+  "MoveInputFolderFilesAfterProcessing": true,
+  "ExternalFileArchiveBehavior": "LeaveOriginalInPlace"
+}

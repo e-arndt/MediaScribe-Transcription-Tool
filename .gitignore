@@ -1,0 +1,14 @@
+# Old local Git history backup
+.git-old/
+
+# Runtime folders - generated/local working data
+/Input/*
+/Output/*
+/Logs/*
+/Models/*
+
+# Keep folder placeholders
+!/Input/.gitkeep
+!/Output/.gitkeep
+!/Logs/.gitkeep
+!/Models/.gitkeep
