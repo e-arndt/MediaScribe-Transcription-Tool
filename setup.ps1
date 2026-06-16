@@ -1,10 +1,16 @@
 <#
 MediaScribe Setup Script
 
-Creates a local MediaScribe install folder, copies the app files,
+Creates or repairs a local MediaScribe install folder, copies the app files,
 generates a clean config.json, creates a launcher, and checks dependencies.
 
 This installer is designed for normal Windows users and does not require admin rights.
+
+Install / repair policy:
+- Required folders are created if missing.
+- Existing files inside Input, Output, Logs, Models, and Tools are preserved.
+- Core app files may be replaced during install or repair.
+- config.json is regenerated for the selected install folder.
 #>
 
 $ErrorActionPreference = "Stop"
@@ -52,19 +58,6 @@ function Write-Fail {
     Write-Host "[MISSING] $Message" -ForegroundColor Red
 }
 
-function Backup-ExistingFile {
-    param (
-        [string]$Path
-    )
-
-    if (Test-Path $Path) {
-        $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-        $backupPath = "$Path.bak_$timestamp"
-        Copy-Item -Path $Path -Destination $backupPath -Force
-        Write-Warn "Existing file backed up: $backupPath"
-    }
-}
-
 function Copy-AppFile {
     param (
         [string]$SourcePath,
@@ -72,17 +65,17 @@ function Copy-AppFile {
         [bool]$Required = $true
     )
 
-    if (Test-Path $SourcePath) {
-        Backup-ExistingFile -Path $DestinationPath
-        Copy-Item -Path $SourcePath -Destination $DestinationPath -Force
+    if (Test-Path -LiteralPath $SourcePath -PathType Leaf) {
+        Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
         Write-Ok "Copied $(Split-Path $SourcePath -Leaf)"
-    } else {
-        if ($Required) {
-            throw "Required setup file is missing: $SourcePath"
-        } else {
-            Write-Warn "Optional file not found, skipping: $(Split-Path $SourcePath -Leaf)"
-        }
+        return
     }
+
+    if ($Required) {
+        throw "Required setup file is missing: $SourcePath"
+    }
+
+    Write-Warn "Optional file not found, skipping: $(Split-Path $SourcePath -Leaf)"
 }
 
 function Test-CommandExists {
@@ -182,7 +175,7 @@ function Find-WhisperCommand {
             )
 
             foreach ($possiblePath in $possibleWhisperPaths) {
-                if (Test-Path $possiblePath) {
+                if (Test-Path -LiteralPath $possiblePath -PathType Leaf) {
                     return $possiblePath
                 }
             }
@@ -212,20 +205,10 @@ function Test-PythonWhisper {
     return $false
 }
 
-function Test-GlobalWhisper {
-    $whisperPath = Find-WhisperCommand
-
-    if ([string]::IsNullOrWhiteSpace($whisperPath)) {
-        return $false
-    }
-
-    return $true
-}
-
 function Test-WhisperAvailable {
     $result = [ordered]@{
         Available = $false
-        Method = "Not found"
+        Method    = "not found"
     }
 
     if (Test-PythonWhisper) {
@@ -245,6 +228,41 @@ function Test-WhisperAvailable {
     return $result
 }
 
+function Test-FFmpegAvailable {
+    param (
+        [string]$InstallFolder
+    )
+
+    $result = [ordered]@{
+        Available = $false
+        Method    = "not found"
+        Detail    = "not found"
+    }
+
+    $localFfmpeg = Join-Path $InstallFolder "Tools\ffmpeg\ffmpeg.exe"
+
+    if (Test-Path -LiteralPath $localFfmpeg -PathType Leaf) {
+        $result.Available = $true
+        $result.Method = "local Tools\ffmpeg"
+        $result.Detail = $localFfmpeg
+        return $result
+    }
+
+    $systemFfmpeg = Get-Command "ffmpeg" -ErrorAction SilentlyContinue
+
+    if ($null -ne $systemFfmpeg) {
+        $ffmpegVersion = & ffmpeg -version 2>&1 | Select-Object -First 1
+
+        $result.Available = $true
+        $result.Method = "system PATH"
+        $result.Detail = $ffmpegVersion
+        return $result
+    }
+
+    $result.Detail = "No bundled FFmpeg was found in Tools\ffmpeg and no system FFmpeg was found in PATH."
+    return $result
+}
+
 function Invoke-DependencyCheck {
     param (
         [string]$InstallFolder
@@ -254,14 +272,14 @@ function Invoke-DependencyCheck {
 
     $pythonAvailable = Test-CommandExists -Command "python"
     $pipAvailable = $false
-    $whisperAvailable = $false
-    $whisperMethod = "Not found"
-    $ffmpegAvailable = $false
-    $ffmpegMethod = "Not found"
 
     if ($pythonAvailable) {
-        $pythonVersion = & python --version 2>&1
-        Write-Ok "Python found: $pythonVersion"
+        try {
+            $pythonVersion = & python --version 2>&1
+            Write-Ok "Python found: $pythonVersion"
+        } catch {
+            Write-Warn "Python command was found, but version check failed."
+        }
 
         try {
             $pipVersion = & python -m pip --version 2>&1
@@ -275,27 +293,12 @@ function Invoke-DependencyCheck {
         }
 
         if (-not $pipAvailable) {
-            Write-Warn "pip was not found. Attempting to enable pip with ensurepip..."
-
-            try {
-                & python -m ensurepip --upgrade
-                & python -m pip install --upgrade pip
-                $pipVersion = & python -m pip --version 2>&1
-
-                if ($LASTEXITCODE -eq 0) {
-                    $pipAvailable = $true
-                    Write-Ok "pip is now available: $pipVersion"
-                }
-            } catch {
-                Write-Fail "pip could not be enabled automatically."
-            }
+            Write-Fail "pip was not found."
+            Write-Host "OpenAI Whisper usually requires pip for installation."
         }
     } else {
         Write-Fail "Python was not found."
-        Write-Host ""
         Write-Host "MediaScribe usually requires Python and OpenAI Whisper."
-        Write-Host "If the standalone whisper command is available, MediaScribe may still work."
-        Write-Host "Otherwise, install Python from python.org, then run this setup again."
     }
 
     $whisperCheck = Test-WhisperAvailable
@@ -305,56 +308,31 @@ function Invoke-DependencyCheck {
     if ($whisperAvailable) {
         Write-Ok "OpenAI Whisper found through $whisperMethod."
     } else {
-        Write-Warn "OpenAI Whisper was not found through python -m whisper or the global whisper command."
-
-        if ($pythonAvailable -and $pipAvailable) {
-            Write-Host ""
-            Write-Host "Whisper is required for transcription."
-            Write-Host "Installing it can take several minutes and requires internet access."
-            Write-Host ""
-
-            $installWhisper = Read-Host "Install OpenAI Whisper now? (Y/N, default Y)"
-
-            if ([string]::IsNullOrWhiteSpace($installWhisper) -or $installWhisper.Trim().ToUpper() -eq "Y") {
-                Write-Info "Installing OpenAI Whisper..."
-                & python -m pip install -U openai-whisper
-
-                $whisperCheck = Test-WhisperAvailable
-                $whisperAvailable = [bool]$whisperCheck.Available
-                $whisperMethod = [string]$whisperCheck.Method
-
-                if ($whisperAvailable) {
-                    Write-Ok "OpenAI Whisper installed successfully and verified through $whisperMethod."
-                } else {
-                    Write-Fail "Whisper install was attempted, but Whisper did not verify successfully."
-                }
-            } else {
-                Write-Warn "Skipped Whisper install."
-            }
-        } else {
-            Write-Warn "Whisper cannot be installed automatically because Python or pip is missing."
-        }
+        Write-Fail "OpenAI Whisper was not found."
+        Write-Host "MediaScribe cannot transcribe until Whisper is installed."
+        Write-Host "Whisper lookup tried:"
+        Write-Host "  1. python -m whisper"
+        Write-Host "  2. global whisper.exe / whisper command"
     }
 
-    $localFfmpeg = Join-Path $InstallFolder "Tools\ffmpeg\ffmpeg.exe"
+    $ffmpegCheck = Test-FFmpegAvailable -InstallFolder $InstallFolder
+    $ffmpegAvailable = [bool]$ffmpegCheck.Available
+    $ffmpegMethod = [string]$ffmpegCheck.Method
+    $ffmpegDetail = [string]$ffmpegCheck.Detail
 
-    if (Test-Path $localFfmpeg) {
-        $ffmpegAvailable = $true
-        $ffmpegMethod = "local Tools\ffmpeg"
-        Write-Ok "Local FFmpeg found: $localFfmpeg"
-    } elseif (Test-CommandExists -Command "ffmpeg") {
-        $ffmpegVersion = & ffmpeg -version 2>&1 | Select-Object -First 1
-        $ffmpegAvailable = $true
-        $ffmpegMethod = "system PATH"
-        Write-Ok "System FFmpeg found: $ffmpegVersion"
+    if ($ffmpegAvailable) {
+        Write-Ok "FFmpeg found through $ffmpegMethod`: $ffmpegDetail"
     } else {
+        $localFfmpeg = Join-Path $InstallFolder "Tools\ffmpeg\ffmpeg.exe"
+
         Write-Fail "FFmpeg was not found."
-        Write-Host ""
-        Write-Host "MediaScribe requires FFmpeg to extract audio from media files."
-        Write-Host "Future setup versions may bundle FFmpeg automatically."
-        Write-Host "For now, install FFmpeg or place ffmpeg.exe here:"
-        Write-Host "  $localFfmpeg"
+        Write-Host "MediaScribe cannot transcribe until FFmpeg is available."
+        Write-Host "FFmpeg lookup tried:"
+        Write-Host "  1. $localFfmpeg"
+        Write-Host "  2. system ffmpeg from PATH"
     }
+
+    $allReady = $pythonAvailable -and $pipAvailable -and $whisperAvailable -and $ffmpegAvailable
 
     Write-Host ""
     Write-Host "Dependency Summary:"
@@ -362,18 +340,33 @@ function Invoke-DependencyCheck {
     Write-Host "  pip:     $pipAvailable"
     Write-Host "  Whisper: $whisperAvailable ($whisperMethod)"
     Write-Host "  FFmpeg:  $ffmpegAvailable ($ffmpegMethod)"
+
+    return [pscustomobject]@{
+        PythonAvailable  = $pythonAvailable
+        PipAvailable     = $pipAvailable
+        WhisperAvailable = $whisperAvailable
+        WhisperMethod    = $whisperMethod
+        FFmpegAvailable  = $ffmpegAvailable
+        FFmpegMethod     = $ffmpegMethod
+        AllReady         = $allReady
+    }
 }
 
 Write-Section "MediaScribe Setup"
 
 Write-Host "MediaScribe creates transcripts and caption files from audio/video files."
 Write-Host ""
-Write-Host "This setup will install MediaScribe to a local folder and create:"
+Write-Host "This setup will install or repair MediaScribe in a local folder."
+Write-Host ""
+Write-Host "Setup will create these folders if they are missing:"
 Write-Host "  Input"
 Write-Host "  Output"
 Write-Host "  Logs"
 Write-Host "  Models"
 Write-Host "  Tools"
+Write-Host ""
+Write-Host "Existing files inside those folders are preserved."
+Write-Host "Core app files may be replaced during install or repair."
 Write-Host ""
 
 $defaultInstallFolder = Join-Path ([Environment]::GetFolderPath("MyDocuments")) "MediaScribe"
@@ -417,6 +410,8 @@ foreach ($folder in $folders) {
     Write-Ok "Folder ready: $folder"
 }
 
+Write-Info "Existing files inside Input, Output, Logs, Models, and Tools are preserved."
+
 Write-Section "Copying App Files"
 
 $scriptRoot = $PSScriptRoot
@@ -436,20 +431,19 @@ Copy-AppFile -SourcePath $sourceHowToStart -DestinationPath $destHowToStart -Req
 Write-Section "Creating Config"
 
 $configPath = Join-Path $installFolder "config.json"
-Backup-ExistingFile -Path $configPath
 
 $configObject = [ordered]@{
-    AppName = "MediaScribe"
-    BaseFolder = $installFolder
-    InputFolder = $inputFolder
-    OutputFolder = $outputFolder
-    LogsFolder = $logsFolder
-    ModelsFolder = $modelsFolder
-    DefaultModel = "medium"
-    DefaultLanguage = "en"
-    OutputMode = "default"
+    AppName                             = "MediaScribe"
+    BaseFolder                          = $installFolder
+    InputFolder                         = $inputFolder
+    OutputFolder                        = $outputFolder
+    LogsFolder                          = $logsFolder
+    ModelsFolder                        = $modelsFolder
+    DefaultModel                        = "medium"
+    DefaultLanguage                     = "en"
+    OutputMode                          = "default"
     MoveInputFolderFilesAfterProcessing = $true
-    ExternalFileArchiveBehavior = "LeaveOriginalInPlace"
+    ExternalFileArchiveBehavior         = "LeaveOriginalInPlace"
 }
 
 $configJson = $configObject | ConvertTo-Json -Depth 5
@@ -460,7 +454,6 @@ Write-Ok "Created config.json"
 Write-Section "Creating Launcher"
 
 $launcherPath = Join-Path $installFolder "MediaScribe.bat"
-Backup-ExistingFile -Path $launcherPath
 
 $launcherContent = @"
 @echo off
@@ -472,33 +465,58 @@ $launcherContent | Set-Content -Path $launcherPath -Encoding ASCII
 
 Write-Ok "Created MediaScribe.bat"
 
-Write-Section "Copying Bundled FFmpeg If Present"
-
 $sourceFfmpegFolder = Join-Path $scriptRoot "Tools\ffmpeg"
 
-if (Test-Path $sourceFfmpegFolder) {
+if (Test-Path -LiteralPath $sourceFfmpegFolder -PathType Container) {
+    Write-Section "Copying Bundled FFmpeg"
+
     Copy-Item -Path (Join-Path $sourceFfmpegFolder "*") -Destination $ffmpegFolder -Recurse -Force
     Write-Ok "Copied bundled FFmpeg files."
-} else {
-    Write-Warn "No bundled FFmpeg folder found in setup package."
 }
 
-Invoke-DependencyCheck -InstallFolder $installFolder
+$dependencyResult = Invoke-DependencyCheck -InstallFolder $installFolder
 
-Write-Section "Setup Complete"
+if ($dependencyResult.AllReady) {
+    Write-Section "Setup Complete"
+} else {
+    Write-Section "Setup Complete - Missing Dependencies"
+}
 
 Write-Host "MediaScribe is installed here:"
 Write-Host "  $installFolder"
 Write-Host ""
-Write-Host "To use it:"
-Write-Host "  1. Put audio/video files in:"
-Write-Host "     $inputFolder"
+
+Write-Host "Install / repair notes:"
+Write-Host "  Core app files were copied or replaced."
+Write-Host "  Existing files inside Input, Output, Logs, Models, and Tools were preserved."
 Write-Host ""
-Write-Host "  2. Run:"
-Write-Host "     $launcherPath"
-Write-Host ""
-Write-Host "  3. Transcripts and caption files will be created in:"
-Write-Host "     $outputFolder"
+
+if ($dependencyResult.AllReady) {
+    Write-Host "To use MediaScribe:"
+    Write-Host "  1. Put audio/video files in:"
+    Write-Host "     $inputFolder"
+    Write-Host ""
+    Write-Host "  2. Run:"
+    Write-Host "     $launcherPath"
+    Write-Host ""
+    Write-Host "  3. Transcripts and caption files will be created in:"
+    Write-Host "     $outputFolder"
+    Write-Host ""
+} else {
+    Write-Host "MediaScribe files were installed, but transcription will not work until the missing dependencies are fixed."
+    Write-Host ""
+    Write-Host "Required dependencies:"
+    Write-Host "  Python"
+    Write-Host "  pip"
+    Write-Host "  OpenAI Whisper"
+    Write-Host "  FFmpeg"
+    Write-Host ""
+    Write-Host "After installing the missing dependencies, run Install.bat again to re-check setup."
+    Write-Host ""
+}
+
+Write-Host "To remove MediaScribe, delete the installed MediaScribe folder:"
+Write-Host "  $installFolder"
 Write-Host ""
 
 $openFolder = Read-Host "Open the MediaScribe folder now? (Y/N, default Y)"

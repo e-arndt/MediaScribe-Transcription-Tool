@@ -58,6 +58,7 @@ Install-MediaScribe.bat
 
 The installer launcher starts PowerShell and runs:
 
+powershell
 setup.ps1
 
 
@@ -69,6 +70,36 @@ Documents\MediaScribe
 
 
 Setup creates the installed MediaScribe folder and copies the needed files there.
+
+## Reinstalling or Repairing MediaScribe
+
+You can run `Install.bat` again to reinstall or repair MediaScribe.
+
+This is useful if core app files were damaged, deleted, or need to be updated.
+
+During reinstall or repair, setup may replace the core app files, including:
+
+transcribe.ps1
+README.md
+How to Start transcription.txt
+MediaScribe.bat
+config.json
+
+
+Setup recreates required folders if they are missing.
+
+Setup does **not** clear or delete files inside these folders:
+
+Input
+Output
+Logs
+Models
+Tools
+
+
+This means existing media files, transcripts, WAV files, caption files, and logs should remain in place.
+
+To remove MediaScribe, delete the installed MediaScribe folder.
 
 ## Installed Folder
 
@@ -86,6 +117,7 @@ MediaScribe/
   README.md
   transcribe.ps1
 
+
 ## Start MediaScribe After Installation
 
 After MediaScribe is installed, open the installed MediaScribe folder.
@@ -97,6 +129,7 @@ MediaScribe.bat
 
 You can also run it from PowerShell:
 
+powershell
 .\MediaScribe.bat
 
 
@@ -106,11 +139,15 @@ You can also run it from PowerShell:
 
 When testing directly from the project workspace, you can run:
 
+powershell
 .\Start-MediaScribe.bat
+
 
 or run the PowerShell script directly:
 
+powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\transcribe.ps1
+
 
 This direct command is mainly for development and testing.
 
@@ -316,26 +353,34 @@ Pressing Enter refreshes. This lets you drop more files into the `Input` folder 
 MediaScribe needs:
 
 Python
+pip
 OpenAI Whisper
 FFmpeg
 
 
 The setup script checks for these dependencies.
 
+MediaScribe files may still install if dependencies are missing, but transcription will not work until the missing dependencies are installed or fixed.
+
+After fixing missing dependencies, run `Install.bat` again to re-check setup.
+
 ### FFmpeg Lookup
 
 MediaScribe looks for FFmpeg in this order:
-
 
 1. Local Tools\ffmpeg\ffmpeg.exe
 2. System ffmpeg from PATH
 
 
+If bundled FFmpeg is missing but system FFmpeg is found, MediaScribe can still work.
+
+If both bundled FFmpeg and system FFmpeg are missing, MediaScribe cannot transcribe.
+
 ### Whisper Lookup
 
 MediaScribe looks for Whisper in this order:
 
-
+text
 1. python -m whisper
 2. Global whisper.exe / whisper command
 
@@ -362,6 +407,7 @@ json
   "MoveInputFolderFilesAfterProcessing": true,
   "ExternalFileArchiveBehavior": "LeaveOriginalInPlace"
 }
+
 
 ## Configuration Fields
 
@@ -437,6 +483,7 @@ LeaveOriginalInPlace
 * Files inside the `Input` folder are moved into their output job folder after processing.
 * External files used through parameter mode are left in place.
 * Generated output files are ignored by Git.
-* `Install.bat` or `Install-MediaScribe.bat` is for installation.
+* `Install.bat` or `Install-MediaScribe.bat` is for installation, reinstall, or repair.
 * `MediaScribe.bat` is for daily use after installation.
 * `Start-MediaScribe.bat` is for workspace/developer testing.
+* To uninstall MediaScribe, delete the installed MediaScribe folder.

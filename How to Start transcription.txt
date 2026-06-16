@@ -2,7 +2,7 @@ MediaScribe - Quick Start
 
 MediaScribe creates transcripts and caption files from audio/video files.
 
-There are two steps:
+There are two main steps:
 
 1. Install MediaScribe
 2. Use MediaScribe
@@ -47,7 +47,64 @@ MediaScribe.bat
 That is the normal launcher you use after installation.
 
 ============================================================
-2. USE MEDIASCRIBE
+2. REINSTALLING OR REPAIRING MEDIASCRIBE
+========================================
+
+You can run Install.bat again to reinstall or repair MediaScribe.
+
+This is useful if core app files were damaged, deleted, or need to be updated.
+
+During reinstall or repair, setup may replace the core app files, including:
+
+transcribe.ps1
+README.md
+How to Start transcription.txt
+MediaScribe.bat
+config.json
+
+Setup recreates required folders if they are missing.
+
+Setup does not clear or delete files inside these folders:
+
+Input
+Output
+Logs
+Models
+Tools
+
+This means existing media files, transcripts, WAV files, caption files, and logs should remain in place.
+
+To remove MediaScribe, delete the installed MediaScribe folder.
+
+============================================================
+3. DEPENDENCIES
+===============
+
+MediaScribe requires:
+
+Python
+pip
+OpenAI Whisper
+FFmpeg
+
+The setup script checks for these dependencies.
+
+MediaScribe looks for FFmpeg in this order:
+
+1. Local Tools\ffmpeg\ffmpeg.exe
+2. System FFmpeg from PATH
+
+MediaScribe looks for Whisper in this order:
+
+1. python -m whisper
+2. Global whisper.exe / whisper command
+
+If setup says a dependency is missing, MediaScribe files may still be installed, but transcription will not work until the missing dependency is installed or fixed.
+
+After fixing missing dependencies, run Install.bat again to re-check setup.
+
+============================================================
+4. USE MEDIASCRIBE
 ==================
 
 After setup finishes, open the installed MediaScribe folder.
@@ -75,7 +132,7 @@ You can also run it from PowerShell with:
 .\MediaScribe.bat
 
 ============================================================
-3. CHOOSE WHAT TO TRANSCRIBE
+5. CHOOSE WHAT TO TRANSCRIBE
 ============================
 
 MediaScribe will show a list of recognized files.
@@ -94,7 +151,7 @@ Choose B to process all files.
 Choose Q to quit.
 
 ============================================================
-4. CHOOSE OUTPUT FILES
+6. CHOOSE OUTPUT FILES
 ======================
 
 MediaScribe will ask what output files you want.
@@ -111,7 +168,7 @@ Caption use:
 Use SRT or VTT files for video caption/subtitle workflows.
 
 ============================================================
-5. CHOOSE TRANSCRIPTION MODE
+7. CHOOSE TRANSCRIPTION MODE
 ============================
 
 MediaScribe will ask which transcription mode to use.
@@ -122,7 +179,7 @@ MediaScribe will ask which transcription mode to use.
 Pressing Enter uses Fast mode.
 
 ============================================================
-6. FIND RESULTS
+8. FIND RESULTS
 ===============
 
 Results are saved in the Output folder.
@@ -153,7 +210,7 @@ TSV timing file
 JSON Whisper output
 
 ============================================================
-7. AFTER PROCESSING
+9. AFTER PROCESSING
 ===================
 
 After processing finishes, MediaScribe asks what to do next.
@@ -182,6 +239,6 @@ Audio is extracted only and converted to mono 16 kHz WAV for consistency.
 
 Files inside the Input folder are moved into their output folder after processing.
 
-The Install.bat or Install-MediaScribe.bat file is only used to install MediaScribe.
+The Install.bat or Install-MediaScribe.bat file is only used to install, reinstall, or repair MediaScribe.
 
 After installation, use MediaScribe.bat from the installed MediaScribe folder.
