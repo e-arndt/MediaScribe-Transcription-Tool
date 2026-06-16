@@ -1,0 +1,81 @@
+MediaScribe - Quick Start
+
+MediaScribe creates transcripts and caption files from audio/video files.
+
+1. Put one or more audio or video files into the Input folder.
+
+Recognized video files:
+MP4, MKV, MOV, M4V, AVI, WEBM
+
+Recognized audio files:
+MP3, M4A, WAV, AAC, FLAC, OGG, OPUS, WMA
+
+2. Run transcribe.ps1 with PowerShell.
+
+You can usually right-click transcribe.ps1 and choose "Run with PowerShell."
+
+3. Press Enter to start.
+
+4. Choose what to transcribe.
+
+If one or more files are found, MediaScribe will show a file list.
+
+Example:
+
+[1] First file.mp4
+[2] Second file.mp3
+[B] Process all files
+[Q] Quit
+
+Choose a file number to process one file, or choose B to process all files.
+
+5. Choose output files.
+
+[D] Default - original file, WAV audio, TXT transcript
+[F] Full - original file, WAV audio, TXT, SRT, VTT, TSV, JSON
+
+Default mode is recommended for most users.
+
+Use Full mode when you need caption/subtitle files or detailed Whisper output.
+
+Caption use:
+Use SRT or VTT files for video caption/subtitle workflows.
+
+6. Choose transcription mode.
+
+[F] Fast - quicker; good for most audio
+[A] Accurate - slower; better if Fast misses words; more compute / larger model
+
+Pressing Enter uses Fast mode.
+
+7. Find results in the Output folder.
+
+Each file gets its own output folder.
+
+Example:
+
+Output\My Recording\
+  My Recording.mp3
+  My Recording.wav
+  My Recording.txt
+
+8. After processing finishes, choose what to do next.
+
+[R] Run again / return to file list
+[O] Open output folder
+[Q] Quit
+
+Pressing Enter quits.
+
+If no files are found, you can add files to the Input folder and choose Refresh.
+
+[R] Refresh / check again
+[O] Open Input folder
+[Q] Quit
+
+Pressing Enter refreshes.
+
+Notes:
+DRM/protected media may fail.
+Audio is extracted only and converted to mono 16 kHz WAV for consistency.
+Files inside the Input folder are moved into their output folder after processing.
