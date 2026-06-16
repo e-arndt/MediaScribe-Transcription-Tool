@@ -464,9 +464,8 @@ Backup-ExistingFile -Path $launcherPath
 
 $launcherContent = @"
 @echo off
-cd /d "$installFolder"
+cd /d "%~dp0"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0transcribe.ps1"
-pause
 "@
 
 $launcherContent | Set-Content -Path $launcherPath -Encoding ASCII
