@@ -136,6 +136,7 @@ function Test-PythonWhisperModule {
   return $false
 }
 
+
 function Resolve-FFmpegCommand {
   param(
     [string]$BaseFolder
@@ -309,6 +310,11 @@ if (-not $ResolvedWhisperCommand.Found) {
   exit 1
 }
 
+# Start the interactive app with a clean screen after dependency checks pass.
+if (-not $ParameterMode) {
+  cls
+}
+
 function Format-CenteredText {
   param(
     [string]$Text,
@@ -377,7 +383,8 @@ if (-not $ParameterMode) {
   Write-Host "Output folder:"
   Write-Host "  $OutputDir\<FileName>\"
   Write-Host ""
-  Read-Host "Press Enter to start (Ctrl+C to cancel)" | Out-Null
+  Read-Host "Press Enter to start" | Out-Null
+  cls
 }
 
 function Select-OutputMode {
@@ -477,20 +484,22 @@ function Invoke-TranscriptionFile {
   # -vn = ignore video; safe for audio-only inputs too.
   # Start FFmpeg as a child process instead of piping output through PowerShell.
   $ffmpegArgs = @(
-    "-i", "`"$($SelectedInputFile.FullName)`"",
-    "-vn",
-    "-ac", "1",
-    "-ar", "16000",
-    "-c:a", "pcm_s16le",
-    "`"$WavPath`"",
-    "-y"
-  )
+  "-hide_banner",
+  "-loglevel", "error",
+  "-i", "`"$($SelectedInputFile.FullName)`"",
+  "-vn",
+  "-ac", "1",
+  "-ar", "16000",
+  "-c:a", "pcm_s16le",
+  "`"$WavPath`"",
+  "-y"
+)
 
   $ffmpegProcess = Start-Process -FilePath $ResolvedFFmpegCommand.FilePath -ArgumentList $ffmpegArgs -NoNewWindow -Wait -PassThru
   $ffmpegExit = $ffmpegProcess.ExitCode
 
   if ($ffmpegExit -ne 0) {
-    Write-Host "⚠️ FFmpeg exited with code $ffmpegExit" -ForegroundColor Yellow
+    Write-Host "[WARN] FFmpeg exited with code $ffmpegExit" -ForegroundColor Yellow
   }
 
   if (-not (Test-Path -LiteralPath $WavPath)) {
@@ -509,7 +518,10 @@ function Invoke-TranscriptionFile {
   # Run Whisper before moving the original input file.
   # This keeps the source path stable while FFmpeg and Whisper are working.
   Write-Host ""
+  Write-Host "Live transcript processes in 30-second chunks."
+  Write-Host "Progress is displayed below, but may take a while."
   Write-Host "Running Whisper ($WhisperModel)..."
+  Write-Host ""
 
   if ($ResolvedWhisperCommand.Mode -eq "PythonModule") {
     $whisperArgs = @(
@@ -517,6 +529,7 @@ function Invoke-TranscriptionFile {
       "`"$WavPath`"",
       "--model", $WhisperModel,
       "--language", $WhisperLanguage,
+      "--fp16", "False",
       "--output_dir", "`"$JobDir`"",
       "--output_format", $WhisperOutputFormat
     )
@@ -525,6 +538,7 @@ function Invoke-TranscriptionFile {
       "`"$WavPath`"",
       "--model", $WhisperModel,
       "--language", $WhisperLanguage,
+      "--fp16", "False"
       "--output_dir", "`"$JobDir`"",
       "--output_format", $WhisperOutputFormat
     )
@@ -551,7 +565,7 @@ function Invoke-TranscriptionFile {
   }
 
   if ($missingOutputs.Count -gt 0) {
-    Write-Host "⚠️ Whisper finished, but expected output files were not found: $($missingOutputs -join ', ')." -ForegroundColor Yellow
+    Write-Host "[WARN] Whisper finished, but expected output files were not found: $($missingOutputs -join ', ')." -ForegroundColor Yellow
   }
 
   Write-Host ""
@@ -571,7 +585,7 @@ function Invoke-TranscriptionFile {
     try {
       Move-Item -LiteralPath $SelectedInputFile.FullName -Destination $ArchivedInputPath -ErrorAction Stop
     } catch {
-      Write-Host "⚠️ Could not move original input file into the job folder." -ForegroundColor Yellow
+      Write-Host "[WARN] Could not move original input file into the job folder." -ForegroundColor Yellow
       Write-Host "Source remains at:"
       Write-Host "  $($SelectedInputFile.FullName)"
       Write-Host "Move error: $($_.Exception.Message)" -ForegroundColor Yellow
@@ -593,10 +607,10 @@ function Invoke-TranscriptionFile {
   Write-Host ""
 
   if ($whisperExit -eq 0) {
-    Write-Host "✅ Done. Files saved in:"
+    Write-Host "[OK] Done. Files saved in:" -ForegroundColor Green
     Write-Host "  $JobDir"
   } else {
-    Write-Host "⚠️ Whisper exited with code $whisperExit" -ForegroundColor Yellow
+    Write-Host "[WARN] Whisper exited with code $whisperExit" -ForegroundColor Yellow
     Write-Host "Check output folder:"
     Write-Host "  $JobDir"
   }
@@ -686,10 +700,10 @@ if ($ParameterMode) {
   }
 
   Write-Host ""
-  Write-Host "Recognized files found:"
+  Write-Host "Recognized files found:" -ForegroundColor Yellow
 
   for ($i = 0; $i -lt $mediaFiles.Count; $i++) {
-    Write-Host "  [$($i + 1)] $($mediaFiles[$i].Name)"
+    Write-Host "  [$($i + 1)] $($mediaFiles[$i].Name)" -ForegroundColor Yellow
   }
 
   if ($mediaFiles.Count -gt 1) {
@@ -738,6 +752,8 @@ if ($ParameterMode) {
   $WhisperModel = Select-WhisperModel -DefaultModel $DefaultModel
   $WhisperLanguage = $DefaultLanguage
 
+  cls
+
   if ($batchMode) {
     Write-Host ""
     Write-Host "Batch mode selected. Processing $($selectedFiles.Count) files."
@@ -775,11 +791,11 @@ if ($ParameterMode) {
 
     foreach ($result in $results) {
       if ($result.Success) {
-        Write-Host "  ✅ $($result.FileName)"
+        Write-Host "  [OK] $($result.FileName)" -ForegroundColor Green
       } else {
-        Write-Host "  ⚠️ $($result.FileName) - $($result.Message)" -ForegroundColor Yellow
+        Write-Host "  [WARN] $($result.FileName) - $($result.Message)" -ForegroundColor Yellow
       }
-    }
+  }
 
     Write-Host ""
     Write-Host "Output folder:"

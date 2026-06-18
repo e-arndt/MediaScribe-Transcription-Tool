@@ -69,7 +69,7 @@ function Write-Fail {
     Write-Host "[MISSING] $Message" -ForegroundColor Red
 }
 
-function Ask-YesNo {
+function Read-YesNo {
     param (
         [string]$Prompt,
         [string]$Default = "Y"
@@ -307,7 +307,7 @@ function Install-BundledPython {
     Write-Host "This step may take a few minutes."
     Write-Host ""
 
-    $installPython = Ask-YesNo -Prompt "Install bundled Python now? (Y/N, default Y)" -Default "Y"
+    $installPython = Read-YesNo -Prompt "Install bundled Python now? (Y/N, default Y)" -Default "Y"
 
     if (-not $installPython) {
         Write-Warn "Python install skipped by user."
@@ -514,7 +514,7 @@ function Install-WhisperWithPip {
     Write-Host "Setup can install it with pip. Internet is required."
     Write-Host ""
 
-    $installWhisper = Ask-YesNo -Prompt "Install OpenAI Whisper now? (Y/N, default Y)" -Default "Y"
+    $installWhisper = Read-YesNo -Prompt "Install OpenAI Whisper now? (Y/N, default Y)" -Default "Y"
 
     if (-not $installWhisper) {
         Write-Warn "Whisper install skipped."
@@ -526,7 +526,7 @@ function Install-WhisperWithPip {
     if (-not (Test-InternetAvailable)) {
         Write-Warn "Internet check failed. Whisper install may not work."
 
-        $tryAnyway = Ask-YesNo -Prompt "Try anyway? (Y/N, default Y)" -Default "Y"
+        $tryAnyway = Read-YesNo -Prompt "Try anyway? (Y/N, default Y)" -Default "Y"
 
         if (-not $tryAnyway) {
             Write-Warn "Whisper install skipped."
