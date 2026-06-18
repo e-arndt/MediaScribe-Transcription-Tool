@@ -4,10 +4,13 @@
 # =====================================================
 
 param(
-  [string]$InputFile,
-  [string]$OutputFolder,
-  [string]$Model,
-  [string]$Language
+    [string]$InputFile,
+    [string]$OutputFolder,
+    [string]$Model,
+    [string]$Language,
+
+    [ValidateSet("default", "full")]
+    [string]$OutputMode
 )
 
 function New-DefaultConfig {
@@ -264,6 +267,11 @@ if (-not [string]::IsNullOrWhiteSpace($Model)) {
 
 if (-not [string]::IsNullOrWhiteSpace($Language)) {
   $DefaultLanguage = $Language
+}
+
+# Allow command-line / future GUI mode to override configured output mode.
+if (-not [string]::IsNullOrWhiteSpace($OutputMode)) {
+    $DefaultOutputMode = $OutputMode.ToLowerInvariant()
 }
 
 $NormalizedOutputMode = Normalize-OutputMode -Mode $DefaultOutputMode
