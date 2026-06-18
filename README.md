@@ -21,17 +21,26 @@ Get results in Output
 
 ## Recommended User Flow
 
-Normal users should not need to run the long PowerShell command manually.
+Normal users should not need to run long PowerShell commands manually.
 
 The intended flow is:
 
-Download / USB / Desktop folder
+Download / USB / Desktop / extracted ZIP folder
   Install.bat or Install-MediaScribe.bat
     runs setup.ps1
-      creates installed MediaScribe folder
+      creates or repairs installed MediaScribe folder
         MediaScribe.bat
           runs transcribe.ps1
 
+
+After a successful install, setup can also offer to run MediaScribe immediately.
+
+For daily use after installation, run:
+
+MediaScribe.bat
+
+
+from the installed MediaScribe folder.
 
 ## Install MediaScribe
 
@@ -47,7 +56,6 @@ Project folder
 
 
 Double-click:
-
 Install.bat
 
 
@@ -70,6 +78,15 @@ Documents\MediaScribe
 
 
 Setup creates the installed MediaScribe folder and copies the needed files there.
+
+If setup completes successfully and all required dependencies are available, setup can ask:
+
+Run MediaScribe now? (Y/N, default Y)
+
+
+Press Enter or choose `Y` to start MediaScribe immediately.
+
+Choose `N` if you want to run MediaScribe later.
 
 ## Reinstalling or Repairing MediaScribe
 
@@ -111,6 +128,9 @@ MediaScribe/
   Logs/
   Models/
   Tools/
+    ffmpeg/
+      ffmpeg.exe
+      ffprobe.exe
   config.json
   How to Start transcription.txt
   MediaScribe.bat
@@ -118,12 +138,13 @@ MediaScribe/
   transcribe.ps1
 
 
+The local FFmpeg files are present when bundled FFmpeg was included in the package and copied during setup.
+
 ## Start MediaScribe After Installation
 
 After MediaScribe is installed, open the installed MediaScribe folder.
 
 Then double-click:
-
 MediaScribe.bat
 
 
@@ -134,6 +155,10 @@ powershell
 
 
 `MediaScribe.bat` starts the installed copy of `transcribe.ps1`.
+
+`Install.bat` is for installing, reinstalling, or repairing MediaScribe.
+
+`MediaScribe.bat` is for normal daily use after installation.
 
 ## Developer / Workspace Start
 
@@ -206,6 +231,8 @@ Output/
     My Recording.txt
 
 
+If an output folder already exists for a file name, MediaScribe creates a timestamped sibling folder.
+
 ### Logs
 
 Reserved for logging support.
@@ -218,22 +245,23 @@ Reserved for model-related support.
 
 Reserved for bundled tools.
 
-If FFmpeg is bundled later, the local FFmpeg path will be:
+Bundled FFmpeg is copied into:
+Tools\ffmpeg\
 
+
+The local FFmpeg executable path is:
 Tools\ffmpeg\ffmpeg.exe
 
 
-MediaScribe currently prefers local bundled FFmpeg if present, then falls back to system FFmpeg from PATH.
+MediaScribe prefers local bundled FFmpeg if present, then falls back to system FFmpeg from PATH.
 
 ## Supported Input Formats
 
 Recognized video files:
-
 MP4, MKV, MOV, M4V, AVI, WEBM
 
 
 Recognized audio files:
-
 MP3, M4A, WAV, AAC, FLAC, OGG, OPUS, WMA
 
 
@@ -248,7 +276,22 @@ DRM-protected or damaged media files may fail.
 5. Choose a file number, or choose `B` to process all files.
 6. Choose an output mode.
 7. Choose Fast or Accurate transcription mode.
-8. Review the results in the `Output` folder.
+8. Wait while FFmpeg extracts audio and Whisper transcribes.
+9. Review the results in the `Output` folder.
+
+## Terminal Interface
+
+MediaScribe uses a colored terminal interface with consistent section banners and status labels.
+
+Common labels include:
+
+[INFO]
+[OK]
+[WARN]
+[ERROR]
+
+
+The setup and transcription tools use a similar style so the install-to-first-run flow feels like one app.
 
 ## File Selection
 
@@ -303,9 +346,31 @@ Fast mode is the default. It is quicker and works well for most audio.
 
 Pressing Enter at the mode prompt uses Fast mode.
 
+Fast mode uses the configured/default Whisper model.
+
+The current default model is:
+medium
+
+
 ### Accurate
 
-Accurate mode is slower and uses a larger model. It may help when Fast mode misses words or the audio is harder to understand.
+Accurate mode is slower and uses the large Whisper model.
+
+It may help when Fast mode misses words or the audio is harder to understand.
+
+## While Transcribing
+
+MediaScribe first extracts audio with FFmpeg.
+
+FFmpeg output is minimized so normal users do not have to see technical FFmpeg chatter.
+
+Then MediaScribe runs Whisper.
+
+During Whisper transcription, live transcript progress appears in the terminal.
+
+This progress may appear in chunks and may take a while, especially for longer files or larger Whisper models.
+
+This is normal and helps show that transcription is still working.
 
 ## Batch Processing
 
@@ -319,10 +384,10 @@ At the end, MediaScribe shows a batch summary.
 
 Example:
 
-Batch complete.
+Batch Summary
 
-  [OK] First file.mp4
-  [OK] Second file.mp3
+[OK] First file.mp4
+[OK] Second file.mp3
 
 Output folder:
   Output
@@ -364,28 +429,81 @@ MediaScribe files may still install if dependencies are missing, but transcripti
 
 After fixing missing dependencies, run `Install.bat` again to re-check setup.
 
-### FFmpeg Lookup
+## Bundled Dependencies
+
+MediaScribe may include dependency installers or tools in the package folder.
+
+### FFmpeg
+
+Bundled FFmpeg should be placed in:
+Dependencies\FFmpeg\
+
+
+Expected files:
+
+ffmpeg.exe
+ffprobe.exe
+
+
+During setup, bundled FFmpeg is copied into the installed runtime folder:
+Tools\ffmpeg\
+
+
+MediaScribe then uses:
+Tools\ffmpeg\ffmpeg.exe
+
+
+### Python
+
+A bundled Python installer may be placed in:
+Dependencies\Python\
+
+
+Example:
+python-3.13.7-amd64.exe
+
+
+If Python is missing, setup can offer to run the bundled Python installer.
+
+### pip
+
+pip is handled through Python.
+
+If Python is available but pip is missing, setup can try:
+
+powershell
+python -m ensurepip --upgrade
+
+
+### OpenAI Whisper
+
+OpenAI Whisper is installed using pip if it is missing.
+
+Installing Whisper requires internet access.
+
+If internet access is unavailable or Whisper installation fails, setup should not crash. It may finish with missing dependencies.
+
+After fixing internet access or dependencies, run `Install.bat` again.
+
+## FFmpeg Lookup
 
 MediaScribe looks for FFmpeg in this order:
 
-1. Local Tools\ffmpeg\ffmpeg.exe
-2. System ffmpeg from PATH
-
+1. Local `Tools\ffmpeg\ffmpeg.exe`
+2. System `ffmpeg` from PATH
 
 If bundled FFmpeg is missing but system FFmpeg is found, MediaScribe can still work.
 
 If both bundled FFmpeg and system FFmpeg are missing, MediaScribe cannot transcribe.
 
-### Whisper Lookup
+## Whisper Lookup
 
 MediaScribe looks for Whisper in this order:
 
-text
-1. python -m whisper
-2. Global whisper.exe / whisper command
+1. `python -m whisper`
+2. Global `whisper.exe` / `whisper` command
 
-
-This lets MediaScribe work with either local/bundled tools or existing global installs.
+This lets MediaScribe work with either the Python module path or an existing global Whisper command.
 
 ## Configuration
 
@@ -465,13 +583,21 @@ full
 
 ### MoveInputFolderFilesAfterProcessing
 
-When true, files placed inside the Input folder are moved into their output/job folder after processing.
+When true, files placed inside the Input folder are moved into their output/job folder after successful processing.
 
 ### ExternalFileArchiveBehavior
 
-Controls future behavior for files processed from outside the Input folder.
+Controls behavior for files processed from outside the Input folder.
 
 Currently supported behavior:
+
+
+LeaveOriginalInPlace
+CopyToJobFolder
+
+
+The default behavior is:
+
 
 LeaveOriginalInPlace
 
@@ -480,10 +606,25 @@ LeaveOriginalInPlace
 
 * FFmpeg extracts audio only.
 * Audio is converted to mono 16 kHz WAV for consistency.
-* Files inside the `Input` folder are moved into their output job folder after processing.
-* External files used through parameter mode are left in place.
+* Files inside the `Input` folder are moved into their output job folder after successful processing.
+* External files used through parameter mode are left in place by default.
 * Generated output files are ignored by Git.
 * `Install.bat` or `Install-MediaScribe.bat` is for installation, reinstall, or repair.
 * `MediaScribe.bat` is for daily use after installation.
 * `Start-MediaScribe.bat` is for workspace/developer testing.
 * To uninstall MediaScribe, delete the installed MediaScribe folder.
+
+## Planned GUI
+
+A GUI is planned for a future version.
+
+The recommended GUI direction is to wrap the existing working PowerShell workflow first, rather than rewriting the transcription engine immediately.
+
+Possible GUI phases:
+
+1. Simple launcher/wrapper
+2. Better installed app experience
+3. Shared engine cleanup
+4. GUI polish
+
+The current PowerShell CLI should remain stable while GUI work begins.
