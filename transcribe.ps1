@@ -77,229 +77,231 @@ function Test-CommandExists {
   return ($null -ne $foundCommand)
 }
 
-function Find-WhisperCommand {
-  $globalWhisper = Get-Command "whisper" -ErrorAction SilentlyContinue
-
-  if ($null -ne $globalWhisper) {
-    return $globalWhisper.Source
-  }
-
-  try {
-    $whereWhisper = where.exe whisper 2>$null | Select-Object -First 1
-
-    if (-not [string]::IsNullOrWhiteSpace($whereWhisper)) {
-      return $whereWhisper.Trim()
-    }
-  } catch {
-    # Continue to Python Scripts fallback.
-  }
-
-  if (Test-CommandExists -Command "python") {
-    try {
-      $pythonExe = (Get-Command python).Source
-      $pythonFolder = Split-Path $pythonExe -Parent
-
-      $possibleWhisperPaths = @(
-        (Join-Path $pythonFolder "Scripts\whisper.exe"),
-        (Join-Path $pythonFolder "Scripts\whisper.cmd"),
-        (Join-Path $pythonFolder "Scripts\whisper")
-      )
-
-      foreach ($possiblePath in $possibleWhisperPaths) {
-        if (Test-Path -LiteralPath $possiblePath) {
-          return $possiblePath
-        }
-      }
-    } catch {
-      return $null
-    }
-  }
-
-  return $null
-}
-
-function Test-PythonWhisperModule {
-  if (-not (Test-CommandExists -Command "python")) {
-    return $false
-  }
-
-  try {
-    & python -m whisper --help *> $null
-
-    if ($LASTEXITCODE -eq 0) {
-      return $true
-    }
-  } catch {
-    return $false
-  }
-
-  return $false
-}
-
-
 function Resolve-FFmpegCommand {
   param(
     [string]$BaseFolder
   )
 
-  $candidateFolders = @()
+  $localFFmpeg = Join-Path $BaseFolder "Tools\ffmpeg\ffmpeg.exe"
 
-  if (-not [string]::IsNullOrWhiteSpace($BaseFolder)) {
-    $candidateFolders += $BaseFolder
-  }
-
-  if ($PSScriptRoot -and $candidateFolders -notcontains $PSScriptRoot) {
-    $candidateFolders += $PSScriptRoot
-  }
-
-  foreach ($candidateFolder in $candidateFolders) {
-    $localFfmpeg = Join-Path $candidateFolder "Tools\ffmpeg\ffmpeg.exe"
-
-    if (Test-Path -LiteralPath $localFfmpeg -PathType Leaf) {
-      return [pscustomobject]@{
-        Found    = $true
-        FilePath = $localFfmpeg
-        Method   = "local Tools\ffmpeg"
-        Display  = $localFfmpeg
-      }
+  if (Test-Path -LiteralPath $localFFmpeg) {
+    return [pscustomobject]@{
+      Found    = $true
+      FilePath = $localFFmpeg
+      Source   = "local Tools\ffmpeg"
     }
   }
 
-  $systemFfmpeg = Get-Command "ffmpeg" -ErrorAction SilentlyContinue
+  $systemFFmpeg = Get-Command "ffmpeg" -ErrorAction SilentlyContinue
 
-  if ($null -ne $systemFfmpeg) {
+  if ($null -ne $systemFFmpeg) {
     return [pscustomobject]@{
       Found    = $true
-      FilePath = $systemFfmpeg.Source
-      Method   = "system PATH"
-      Display  = $systemFfmpeg.Source
+      FilePath = $systemFFmpeg.Source
+      Source   = "system PATH"
     }
   }
 
   return [pscustomobject]@{
     Found    = $false
     FilePath = $null
-    Method   = "not found"
-    Display  = "not found"
+    Source   = "not found"
   }
 }
 
 function Resolve-WhisperCommand {
-  if (Test-PythonWhisperModule) {
-    $pythonCommand = Get-Command "python" -ErrorAction SilentlyContinue
-    $pythonPath = if ($null -ne $pythonCommand) { $pythonCommand.Source } else { "python" }
+  $pythonCommand = Get-Command "python" -ErrorAction SilentlyContinue
 
-    return [pscustomobject]@{
-      Found    = $true
-      Mode     = "PythonModule"
-      FilePath = $pythonPath
-      Method   = "python -m whisper"
-      Display  = "python -m whisper"
+  if ($null -ne $pythonCommand) {
+    try {
+      $testProcess = Start-Process `
+        -FilePath $pythonCommand.Source `
+        -ArgumentList "-m", "whisper", "--help" `
+        -NoNewWindow `
+        -Wait `
+        -PassThru `
+        -RedirectStandardOutput "$env:TEMP\mediascribe_whisper_help_out.txt" `
+        -RedirectStandardError "$env:TEMP\mediascribe_whisper_help_err.txt"
+
+      if ($testProcess.ExitCode -eq 0) {
+        return [pscustomobject]@{
+          Found    = $true
+          FilePath = $pythonCommand.Source
+          Mode     = "PythonModule"
+          Source   = "python -m whisper"
+        }
+      }
+    } catch {
+      # Try global whisper command below.
     }
   }
 
-  $whisperPath = Find-WhisperCommand
+  $whisperCommand = Get-Command "whisper" -ErrorAction SilentlyContinue
 
-  if (-not [string]::IsNullOrWhiteSpace($whisperPath)) {
+  if ($null -ne $whisperCommand) {
     return [pscustomobject]@{
       Found    = $true
-      Mode     = "WhisperCommand"
-      FilePath = $whisperPath
-      Method   = "whisper command"
-      Display  = $whisperPath
+      FilePath = $whisperCommand.Source
+      Mode     = "Command"
+      Source   = "whisper command"
     }
   }
 
   return [pscustomobject]@{
     Found    = $false
-    Mode     = "NotFound"
     FilePath = $null
-    Method   = "not found"
-    Display  = "not found"
+    Mode     = "Missing"
+    Source   = "not found"
+  }
+}
+
+function Normalize-OutputMode {
+  param(
+    [string]$Mode
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Mode)) {
+    return "default"
+  }
+
+  $normalized = $Mode.Trim().ToLower()
+
+  if ($normalized -eq "full") {
+    return "full"
+  }
+
+  return "default"
+}
+
+function Get-ExpectedOutputExtensions {
+  param(
+    [string]$SelectedOutputMode
+  )
+
+  if ($SelectedOutputMode -eq "full") {
+    return @(".txt", ".srt", ".vtt", ".tsv", ".json")
+  }
+
+  return @(".txt")
+}
+
+function Get-UniqueDestinationPath {
+  param(
+    [string]$FolderPath,
+    [string]$FileName
+  )
+
+  $destination = Join-Path $FolderPath $FileName
+
+  if (-not (Test-Path -LiteralPath $destination)) {
+    return $destination
+  }
+
+  $nameWithoutExtension = [System.IO.Path]::GetFileNameWithoutExtension($FileName)
+  $extension = [System.IO.Path]::GetExtension($FileName)
+
+  $counter = 1
+
+  do {
+    $candidateName = "{0}_{1}{2}" -f $nameWithoutExtension, $counter, $extension
+    $candidatePath = Join-Path $FolderPath $candidateName
+    $counter++
+  } while (Test-Path -LiteralPath $candidatePath)
+
+  return $candidatePath
+}
+
+function Test-PathInsideFolder {
+  param(
+    [string]$ChildPath,
+    [string]$ParentPath
+  )
+
+  try {
+    $resolvedChild = (Resolve-Path -LiteralPath $ChildPath).ProviderPath
+    $resolvedParent = (Resolve-Path -LiteralPath $ParentPath).ProviderPath
+
+    $parentWithSlash = $resolvedParent.TrimEnd('\') + '\'
+
+    return $resolvedChild.StartsWith($parentWithSlash, [System.StringComparison]::OrdinalIgnoreCase)
+  } catch {
+    return $false
   }
 }
 
 $ConfigPath = Join-Path $PSScriptRoot "config.json"
-$DefaultConfig = New-DefaultConfig
 
-if (-not (Test-Path -LiteralPath $ConfigPath)) {
-  $DefaultConfig | ConvertTo-Json -Depth 4 | Set-Content -Path $ConfigPath -Encoding UTF8
+if (Test-Path -LiteralPath $ConfigPath) {
+  try {
+    $Config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
+  } catch {
+    Write-Host "Could not read config.json. Using built-in defaults." -ForegroundColor Yellow
+    $Config = New-DefaultConfig
+  }
+} else {
+  $Config = New-DefaultConfig
 }
 
-try {
-  $Config = Get-Content -Raw -LiteralPath $ConfigPath | ConvertFrom-Json
-} catch {
-  Write-Host "Could not read config.json. Please fix or delete it, then run again." -ForegroundColor Red
-  Write-Host "Config path: $ConfigPath"
-  exit 1
-}
+$BaseFolder = Get-ConfigValue -Config $Config -Name "BaseFolder" -DefaultValue $PSScriptRoot
+$InputDir = Resolve-ConfiguredPath -PathValue (Get-ConfigValue -Config $Config -Name "InputFolder" -DefaultValue (Join-Path $BaseFolder "Input")) -BaseFolder $BaseFolder
+$OutputDir = Resolve-ConfiguredPath -PathValue (Get-ConfigValue -Config $Config -Name "OutputFolder" -DefaultValue (Join-Path $BaseFolder "Output")) -BaseFolder $BaseFolder
+$LogsDir = Resolve-ConfiguredPath -PathValue (Get-ConfigValue -Config $Config -Name "LogsFolder" -DefaultValue (Join-Path $BaseFolder "Logs")) -BaseFolder $BaseFolder
+$ModelsDir = Resolve-ConfiguredPath -PathValue (Get-ConfigValue -Config $Config -Name "ModelsFolder" -DefaultValue (Join-Path $BaseFolder "Models")) -BaseFolder $BaseFolder
 
-$AppName = [string](Get-ConfigValue -Config $Config -Name "AppName" -DefaultValue $DefaultConfig.AppName)
-
-$BaseDirRaw = [string](Get-ConfigValue -Config $Config -Name "BaseFolder" -DefaultValue $DefaultConfig.BaseFolder)
-$BaseDir = Resolve-ConfiguredPath -PathValue $BaseDirRaw -BaseFolder $PSScriptRoot
-
-$InputDirRaw = [string](Get-ConfigValue -Config $Config -Name "InputFolder" -DefaultValue (Join-Path $BaseDir "Input"))
-$OutputDirRaw = [string](Get-ConfigValue -Config $Config -Name "OutputFolder" -DefaultValue (Join-Path $BaseDir "Output"))
-$LogsDirRaw = [string](Get-ConfigValue -Config $Config -Name "LogsFolder" -DefaultValue (Join-Path $BaseDir "Logs"))
-$ModelsDirRaw = [string](Get-ConfigValue -Config $Config -Name "ModelsFolder" -DefaultValue (Join-Path $BaseDir "Models"))
-
-$InputDir = Resolve-ConfiguredPath -PathValue $InputDirRaw -BaseFolder $BaseDir
-$OutputDir = Resolve-ConfiguredPath -PathValue $OutputDirRaw -BaseFolder $BaseDir
-$LogsDir = Resolve-ConfiguredPath -PathValue $LogsDirRaw -BaseFolder $BaseDir
-$ModelsDir = Resolve-ConfiguredPath -PathValue $ModelsDirRaw -BaseFolder $BaseDir
-
-$DefaultModel = [string](Get-ConfigValue -Config $Config -Name "DefaultModel" -DefaultValue $DefaultConfig.DefaultModel)
-$DefaultLanguage = [string](Get-ConfigValue -Config $Config -Name "DefaultLanguage" -DefaultValue $DefaultConfig.DefaultLanguage)
-$ConfiguredOutputMode = [string](Get-ConfigValue -Config $Config -Name "OutputMode" -DefaultValue $DefaultConfig.OutputMode)
-$MoveInputFolderFilesAfterProcessing = [bool](Get-ConfigValue -Config $Config -Name "MoveInputFolderFilesAfterProcessing" -DefaultValue $DefaultConfig.MoveInputFolderFilesAfterProcessing)
-$ExternalFileArchiveBehavior = [string](Get-ConfigValue -Config $Config -Name "ExternalFileArchiveBehavior" -DefaultValue $DefaultConfig.ExternalFileArchiveBehavior)
-
-$NormalizedOutputMode = $ConfiguredOutputMode.Trim().ToLowerInvariant()
-if ($NormalizedOutputMode -notin @("default", "full")) {
-  Write-Host "Invalid OutputMode in config.json: $ConfiguredOutputMode" -ForegroundColor Yellow
-  Write-Host "Using OutputMode: default"
-  $NormalizedOutputMode = "default"
-}
+$DefaultModel = Get-ConfigValue -Config $Config -Name "DefaultModel" -DefaultValue "medium"
+$DefaultLanguage = Get-ConfigValue -Config $Config -Name "DefaultLanguage" -DefaultValue "en"
+$DefaultOutputMode = Get-ConfigValue -Config $Config -Name "OutputMode" -DefaultValue "default"
+$MoveInputFolderFilesAfterProcessing = [bool](Get-ConfigValue -Config $Config -Name "MoveInputFolderFilesAfterProcessing" -DefaultValue $true)
+$ExternalFileArchiveBehavior = Get-ConfigValue -Config $Config -Name "ExternalFileArchiveBehavior" -DefaultValue "LeaveOriginalInPlace"
 
 if (-not [string]::IsNullOrWhiteSpace($OutputFolder)) {
   $OutputDir = $OutputFolder
 }
 
+if (-not [string]::IsNullOrWhiteSpace($Model)) {
+  $DefaultModel = $Model
+}
+
+if (-not [string]::IsNullOrWhiteSpace($Language)) {
+  $DefaultLanguage = $Language
+}
+
+$NormalizedOutputMode = Normalize-OutputMode -Mode $DefaultOutputMode
+
 $ParameterMode = -not [string]::IsNullOrWhiteSpace($InputFile)
 
-# --- Recognized formats ---
-$ExtPattern = '\.(mp4|mkv|mov|m4v|avi|webm|mp3|m4a|wav|aac|flac|ogg|opus|wma)$'
-
-# Ensure folders exist.
 foreach ($folder in @($InputDir, $OutputDir, $LogsDir, $ModelsDir)) {
-  New-Item -ItemType Directory -Path $folder -Force | Out-Null
+  if (-not (Test-Path -LiteralPath $folder)) {
+    New-Item -ItemType Directory -Path $folder -Force | Out-Null
+  }
 }
 
-# Resolve transcription dependencies once, then reuse the selected commands.
-$ResolvedFFmpegCommand = Resolve-FFmpegCommand -BaseFolder $BaseDir
+$ResolvedFFmpegCommand = Resolve-FFmpegCommand -BaseFolder $BaseFolder
 $ResolvedWhisperCommand = Resolve-WhisperCommand
 
-Write-Host ""
-Write-Host "Dependency check:"
-if ($ResolvedFFmpegCommand.Found) {
-  Write-Host "  FFmpeg:  $($ResolvedFFmpegCommand.Method) - $($ResolvedFFmpegCommand.Display)"
-} else {
-  Write-Host "  FFmpeg:  not found" -ForegroundColor Red
-}
+if (-not $ParameterMode) {
+  Write-Host ""
+  Write-Host "Dependency check:"
+  if ($ResolvedFFmpegCommand.Found) {
+    Write-Host "  FFmpeg:  $($ResolvedFFmpegCommand.Source) - $($ResolvedFFmpegCommand.FilePath)" -ForegroundColor Green
+  } else {
+    Write-Host "  FFmpeg:  not found" -ForegroundColor Red
+  }
 
-if ($ResolvedWhisperCommand.Found) {
-  Write-Host "  Whisper: $($ResolvedWhisperCommand.Method) - $($ResolvedWhisperCommand.Display)"
-} else {
-  Write-Host "  Whisper: not found" -ForegroundColor Red
+  if ($ResolvedWhisperCommand.Found) {
+    Write-Host "  Whisper: $($ResolvedWhisperCommand.Source) - $($ResolvedWhisperCommand.FilePath)" -ForegroundColor Green
+  } else {
+    Write-Host "  Whisper: not found" -ForegroundColor Red
+  }
 }
 
 if (-not $ResolvedFFmpegCommand.Found) {
   Write-Host ""
   Write-Host "FFmpeg was not found." -ForegroundColor Red
-  Write-Host "MediaScribe requires FFmpeg to extract audio from media files."
-  Write-Host "Install FFmpeg, add it to PATH, or place ffmpeg.exe here:"
-  Write-Host "  $(Join-Path $BaseDir "Tools\ffmpeg\ffmpeg.exe")"
+  Write-Host "Expected local FFmpeg here:"
+  Write-Host "  $(Join-Path $BaseFolder "Tools\ffmpeg\ffmpeg.exe")"
+  Write-Host ""
+  Write-Host "Or install FFmpeg and make sure ffmpeg is available from PATH."
   exit 1
 }
 
@@ -313,6 +315,45 @@ if (-not $ResolvedWhisperCommand.Found) {
 # Start the interactive app with a clean screen after dependency checks pass.
 if (-not $ParameterMode) {
   cls
+}
+
+function Write-Section {
+  param(
+    [string]$Title
+  )
+
+  Write-Host ""
+  Write-Host "============================================================" -ForegroundColor Cyan
+  Write-Host $Title -ForegroundColor Cyan
+  Write-Host "============================================================" -ForegroundColor Cyan
+}
+
+function Write-Ok {
+  param([string]$Message)
+  Write-Host "[OK] $Message" -ForegroundColor Green
+}
+
+function Write-Info {
+  param([string]$Message)
+  Write-Host "[INFO] $Message" -ForegroundColor Green
+}
+
+function Write-Warn {
+  param([string]$Message)
+  Write-Host "[WARN] $Message" -ForegroundColor Yellow
+}
+
+function Write-ErrorMessage {
+  param([string]$Message)
+  Write-Host "[ERROR] $Message" -ForegroundColor Red
+}
+
+function Write-DefaultLine {
+  param(
+    [string]$Text
+  )
+
+  Write-Host $Text -ForegroundColor Yellow
 }
 
 function Format-CenteredText {
@@ -334,55 +375,69 @@ function Format-CenteredText {
 function Write-BoxLine {
   param(
     [string]$Text = "",
-    [int]$Width = 70
+    [int]$Width = 72,
+    [string]$ForegroundColor = "White"
   )
 
-  if ($Text.Length -gt $Width) {
-    $Text = $Text.Substring(0, $Width)
+  $innerWidth = $Width - 4
+
+  if ($Text.Length -gt $innerWidth) {
+    $Text = $Text.Substring(0, $innerWidth)
   }
 
-  Write-Host ("| " + $Text + (" " * ($Width - $Text.Length)) + " |")
+  $padding = " " * ($innerWidth - $Text.Length)
+  Write-Host "| $Text$padding |" -ForegroundColor $ForegroundColor
 }
 
-if (-not $ParameterMode) {
-  $bannerWidth = 70
-  $bannerBorder = "+" + ("=" * ($bannerWidth + 2)) + "+"
+function Show-IntroBanner {
+  $width = 74
+  $innerWidth = $width - 4
 
   Write-Host ""
-  Write-Host $bannerBorder
-  Write-BoxLine -Text (Format-CenteredText -Text $AppName -Width $bannerWidth) -Width $bannerWidth
-  Write-BoxLine -Text (Format-CenteredText -Text "Creates transcripts and caption files from audio/video files" -Width $bannerWidth) -Width $bannerWidth
-  Write-Host $bannerBorder
-  Write-BoxLine -Width $bannerWidth
-  Write-BoxLine -Text "Transcribes local video and audio files into text and optional" -Width $bannerWidth
-  Write-BoxLine -Text "caption/subtitle files." -Width $bannerWidth
-  Write-BoxLine -Width $bannerWidth
-  Write-BoxLine -Text "Default output:" -Width $bannerWidth
-  Write-BoxLine -Text "  Original file, WAV audio, TXT transcript" -Width $bannerWidth
-  Write-BoxLine -Width $bannerWidth
-  Write-BoxLine -Text "Full output:" -Width $bannerWidth
-  Write-BoxLine -Text "  Original file, WAV audio, TXT, SRT, VTT, TSV, JSON" -Width $bannerWidth
-  Write-BoxLine -Width $bannerWidth
-  Write-BoxLine -Text "Caption use:" -Width $bannerWidth
-  Write-BoxLine -Text "  Use SRT or VTT files for video caption/subtitle workflows." -Width $bannerWidth
-  Write-BoxLine -Width $bannerWidth
-  Write-BoxLine -Text "Recognized video files:" -Width $bannerWidth
-  Write-BoxLine -Text "  MP4, MKV, MOV, M4V, AVI, WEBM" -Width $bannerWidth
-  Write-BoxLine -Width $bannerWidth
-  Write-BoxLine -Text "Recognized audio files:" -Width $bannerWidth
-  Write-BoxLine -Text "  MP3, M4A, WAV, AAC, FLAC, OGG, OPUS, WMA" -Width $bannerWidth
-  Write-BoxLine -Width $bannerWidth
-  Write-BoxLine -Text "Notes:" -Width $bannerWidth
-  Write-BoxLine -Text "  DRM/protected media may fail." -Width $bannerWidth
-  Write-BoxLine -Text "  Audio is extracted only and converted to mono 16 kHz WAV." -Width $bannerWidth
-  Write-Host $bannerBorder
+  Write-Host ("+" + ("=" * ($width - 2)) + "+") -ForegroundColor Cyan
+  Write-BoxLine -Text (Format-CenteredText -Text "MediaScribe" -Width $innerWidth) -Width $width -ForegroundColor Green
+  Write-BoxLine -Text (Format-CenteredText -Text "Creates transcripts and caption files from audio/video files" -Width $innerWidth) -Width $width -ForegroundColor Yellow
+  Write-Host ("+" + ("=" * ($width - 2)) + "+") -ForegroundColor Cyan
+  Write-BoxLine -Width $width
+  Write-BoxLine -Text "Transcribes local video and audio files into text and optional" -Width $width
+  Write-BoxLine -Text "caption/subtitle files." -Width $width
+  Write-BoxLine -Width $width
+  Write-BoxLine -Text "Default output:" -Width $width -ForegroundColor Yellow
+  Write-BoxLine -Text "  Original file, WAV audio, TXT transcript" -Width $width
+  Write-BoxLine -Width $width
+  Write-BoxLine -Text "Full output:" -Width $width -ForegroundColor Yellow
+  Write-BoxLine -Text "  Original file, WAV audio, TXT, SRT, VTT, TSV, JSON" -Width $width
+  Write-BoxLine -Width $width
+  Write-BoxLine -Text "Caption use:" -Width $width -ForegroundColor Yellow
+  Write-BoxLine -Text "  Use SRT or VTT files for video caption/subtitle workflows." -Width $width
+  Write-BoxLine -Width $width
+  Write-BoxLine -Text "Recognized video files:" -Width $width -ForegroundColor Yellow
+  Write-BoxLine -Text "  MP4, MKV, MOV, M4V, AVI, WEBM" -Width $width
+  Write-BoxLine -Width $width
+  Write-BoxLine -Text "Recognized audio files:" -Width $width -ForegroundColor Yellow
+  Write-BoxLine -Text "  MP3, M4A, WAV, AAC, FLAC, OGG, OPUS, WMA" -Width $width
+  Write-BoxLine -Width $width
+  Write-BoxLine -Text "Notes:" -Width $width -ForegroundColor Yellow
+  Write-BoxLine -Text "  DRM/protected media may fail." -Width $width
+  Write-BoxLine -Text "  Audio is extracted only and converted to mono 16 kHz WAV." -Width $width
+  Write-Host ("+" + ("=" * ($width - 2)) + "+") -ForegroundColor Cyan
+}
+
+$VideoExtensions = @(".mp4", ".mkv", ".mov", ".m4v", ".avi", ".webm")
+$AudioExtensions = @(".mp3", ".m4a", ".wav", ".aac", ".flac", ".ogg", ".opus", ".wma")
+$SupportedExtensions = $VideoExtensions + $AudioExtensions
+$ExtPattern = "\.({0})$" -f (($SupportedExtensions | ForEach-Object { $_.TrimStart(".") }) -join "|")
+
+if (-not $ParameterMode) {
+  Show-IntroBanner
   Write-Host ""
-  Write-Host "Input folder:"
-  Write-Host "  $InputDir"
+  Write-Host "Input folder:" -ForegroundColor Yellow
+  Write-Host "  $InputDir" -ForegroundColor Green
   Write-Host ""
-  Write-Host "Output folder:"
-  Write-Host "  $OutputDir\<FileName>\"
+  Write-Host "Output folder:" -ForegroundColor Yellow
+  Write-Host "  $OutputDir\<FileName>\" -ForegroundColor Green
   Write-Host ""
+
   Read-Host "Press Enter to start" | Out-Null
   cls
 }
@@ -392,29 +447,24 @@ function Select-OutputMode {
     [string]$DefaultOutputMode
   )
 
+  $defaultLabel = if ($DefaultOutputMode -eq "full") { "Full" } else { "Default" }
+
   Write-Host ""
-  Write-Host "Select output files:"
-  Write-Host "  [D] Default - original file, WAV, TXT transcript"
-  Write-Host "  [F] Full    - original file, WAV, TXT, SRT, VTT, TSV, JSON"
+  Write-Section "Output Options"
+  Write-Host "  [D] Default - Original file, WAV audio, TXT transcript" -ForegroundColor Yellow
+  Write-Host "  [F] Full    - Original file, WAV audio, TXT, SRT, VTT, TSV, JSON" -ForegroundColor Green
+  Write-Host ""
+  Write-DefaultLine "Default: $defaultLabel"
+  $modeChoice = Read-Host "Output mode (D/F, default $defaultLabel)"
 
-  $defaultOutputChoice = if ($DefaultOutputMode -eq "full") { "F" } else { "D" }
-  $outputChoice = Read-Host "Output mode (D/F, default $defaultOutputChoice)"
-
-  if ([string]::IsNullOrWhiteSpace($outputChoice)) {
-    $outputChoice = $defaultOutputChoice
+  if ([string]::IsNullOrWhiteSpace($modeChoice)) {
+    return $DefaultOutputMode
   }
 
-  switch ($outputChoice.Trim().ToUpper()) {
-    "F" {
-      return "full"
-    }
-    "D" {
-      return "default"
-    }
-    default {
-      Write-Host "Invalid output selection. Using config/default output mode: $DefaultOutputMode" -ForegroundColor Yellow
-      return $DefaultOutputMode
-    }
+  switch ($modeChoice.Trim().ToUpper()) {
+    "F" { return "full" }
+    "FULL" { return "full" }
+    default { return "default" }
   }
 }
 
@@ -424,11 +474,12 @@ function Select-WhisperModel {
   )
 
   Write-Host ""
-  Write-Host "Select mode:"
-  Write-Host "  [F] Fast (default) - quicker; good for most audio"
-  Write-Host "  [A] Accurate - slower; better if Fast misses words; more compute / larger model"
-
-  $modeChoice = Read-Host "Mode (F/A)"
+  Write-Section "Transcription Mode"
+  Write-Host "  [F] Fast     - Uses configured/default model ($DefaultModel)" -ForegroundColor Yellow
+  Write-Host "  [A] Accurate - Uses large model" -ForegroundColor Green
+  Write-Host ""
+  Write-DefaultLine "Default: Fast / $DefaultModel"
+  $modeChoice = Read-Host "Mode (F/A, default F)"
 
   if ([string]::IsNullOrWhiteSpace($modeChoice)) {
     $modeChoice = "F"
@@ -453,14 +504,14 @@ function Invoke-TranscriptionFile {
   $WhisperOutputFormat = if ($SelectedOutputMode -eq "full") { "all" } else { "txt" }
 
   $ResolvedInputDir = (Resolve-Path -LiteralPath $InputDir).ProviderPath
-  $ResolvedInputDirWithSeparator = $ResolvedInputDir.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
-  $ResolvedSelectedInputPath = (Resolve-Path -LiteralPath $SelectedInputFile.FullName).ProviderPath
-  $SelectedFileIsInInputDir = $ResolvedSelectedInputPath.StartsWith($ResolvedInputDirWithSeparator, [System.StringComparison]::OrdinalIgnoreCase)
+  $ResolvedInputDirWithSlash = $ResolvedInputDir.TrimEnd('\') + '\'
+  $ResolvedInputFile = (Resolve-Path -LiteralPath $SelectedInputFile.FullName).ProviderPath
+  $InputFileIsInsideInputFolder = $ResolvedInputFile.StartsWith($ResolvedInputDirWithSlash, [System.StringComparison]::OrdinalIgnoreCase)
 
-  $BaseName = $SelectedInputFile.BaseName
-  $Stamp = (Get-Date).ToString("yyyyMMdd_HHmmss")
+  $BaseName = [System.IO.Path]::GetFileNameWithoutExtension($SelectedInputFile.Name)
+  $Stamp = Get-Date -Format "yyyyMMdd_HHmmss"
 
-  # Job folder = archive folder for this input.
+  # Human-friendly default: first run uses the plain file name.
   $JobDir = Join-Path $OutputDir $BaseName
 
   # If folder already exists, create a timestamped sibling folder.
@@ -470,41 +521,42 @@ function Invoke-TranscriptionFile {
 
   New-Item -ItemType Directory -Path $JobDir -Force | Out-Null
 
-  Write-Host ""
-  Write-Host "Selected file: $($SelectedInputFile.Name)"
-  Write-Host "Archive folder: $JobDir"
-  Write-Host "Output mode: $SelectedOutputMode"
+  Write-Section "Transcription Settings"
+  Write-Info "Selected file: $($SelectedInputFile.Name)"
+  Write-Info "Archive folder: $JobDir"
+  Write-Info "Output mode: $SelectedOutputMode"
+  Write-Info "Whisper model: $WhisperModel"
 
   # Create WAV in the job folder.
   $WavPath = Join-Path $JobDir "$BaseName.wav"
 
-  Write-Host ""
-  Write-Host "Extracting audio (FFmpeg) -> $WavPath"
+  Write-Section "Extracting Audio"
+  Write-Info "FFmpeg output: $WavPath"
 
   # -vn = ignore video; safe for audio-only inputs too.
   # Start FFmpeg as a child process instead of piping output through PowerShell.
   $ffmpegArgs = @(
-  "-hide_banner",
-  "-loglevel", "error",
-  "-i", "`"$($SelectedInputFile.FullName)`"",
-  "-vn",
-  "-ac", "1",
-  "-ar", "16000",
-  "-c:a", "pcm_s16le",
-  "`"$WavPath`"",
-  "-y"
-)
+    "-hide_banner",
+    "-loglevel", "error",
+    "-i", "`"$($SelectedInputFile.FullName)`"",
+    "-vn",
+    "-ac", "1",
+    "-ar", "16000",
+    "-c:a", "pcm_s16le",
+    "`"$WavPath`"",
+    "-y"
+  )
 
   $ffmpegProcess = Start-Process -FilePath $ResolvedFFmpegCommand.FilePath -ArgumentList $ffmpegArgs -NoNewWindow -Wait -PassThru
   $ffmpegExit = $ffmpegProcess.ExitCode
 
   if ($ffmpegExit -ne 0) {
-    Write-Host "[WARN] FFmpeg exited with code $ffmpegExit" -ForegroundColor Yellow
+    Write-Warn "FFmpeg exited with code $ffmpegExit"
   }
 
   if (-not (Test-Path -LiteralPath $WavPath)) {
-    Write-Host "Failed to create WAV file. DRM/protected media or unsupported codec may be the cause." -ForegroundColor Red
-    Write-Host "Try re-encoding the source file first, then retry."
+    Write-Host "Failed to create WAV file. DRM/protected media or unsupported codec may be the cause."
+    Write-Host "Install or update FFmpeg, then retry."
 
     return [pscustomobject]@{
       FileName = $SelectedInputFile.Name
@@ -517,10 +569,10 @@ function Invoke-TranscriptionFile {
 
   # Run Whisper before moving the original input file.
   # This keeps the source path stable while FFmpeg and Whisper are working.
-  Write-Host ""
-  Write-Host "Live transcript processes in 30-second chunks."
-  Write-Host "Progress is displayed below, but may take a while."
-  Write-Host "Running Whisper ($WhisperModel)..."
+  Write-Section "Transcribing"
+  Write-Info "Running Whisper model: $WhisperModel"
+  Write-Info "Live transcript progress appears in 30-second chunks."
+  Write-Info "Progress is displayed below and may take a while."
   Write-Host ""
 
   if ($ResolvedWhisperCommand.Mode -eq "PythonModule") {
@@ -538,7 +590,7 @@ function Invoke-TranscriptionFile {
       "`"$WavPath`"",
       "--model", $WhisperModel,
       "--language", $WhisperLanguage,
-      "--fp16", "False"
+      "--fp16", "False",
       "--output_dir", "`"$JobDir`"",
       "--output_format", $WhisperOutputFormat
     )
@@ -547,59 +599,37 @@ function Invoke-TranscriptionFile {
   $whisperProcess = Start-Process -FilePath $ResolvedWhisperCommand.FilePath -ArgumentList $whisperArgs -NoNewWindow -Wait -PassThru
   $whisperExit = $whisperProcess.ExitCode
 
-  # Verify expected outputs exist.
-  # Default mode expects only the plain text transcript from Whisper.
-  # Full mode expects all common Whisper sidecar formats.
-  $expectedOutputExtensions = if ($SelectedOutputMode -eq "full") {
-    @(".txt", ".srt", ".vtt", ".tsv", ".json")
-  } else {
-    @(".txt")
-  }
-
+  $expectedExtensions = Get-ExpectedOutputExtensions -SelectedOutputMode $SelectedOutputMode
   $missingOutputs = @()
-  foreach ($extension in $expectedOutputExtensions) {
+
+  foreach ($extension in $expectedExtensions) {
     $expectedPath = Join-Path $JobDir "$BaseName$extension"
+
     if (-not (Test-Path -LiteralPath $expectedPath)) {
       $missingOutputs += $extension
     }
   }
 
-  if ($missingOutputs.Count -gt 0) {
-    Write-Host "[WARN] Whisper finished, but expected output files were not found: $($missingOutputs -join ', ')." -ForegroundColor Yellow
+  if ($whisperExit -eq 0 -and $missingOutputs.Count -gt 0) {
+    Write-Warn "Whisper finished, but expected output files were not found: $($missingOutputs -join ', ')."
   }
 
-  Write-Host ""
+  # Archive original input file after transcription completes.
+  if ($whisperExit -eq 0) {
+    $archivedOriginal = Get-UniqueDestinationPath -FolderPath $JobDir -FileName $SelectedInputFile.Name
 
-  if ($SelectedFileIsInInputDir -and $MoveInputFolderFilesAfterProcessing) {
-    Write-Host "Input file is inside the Input folder; moving original into job folder."
-
-    $ArchivedInputPath = Join-Path $JobDir $SelectedInputFile.Name
-
-    if (Test-Path -LiteralPath $ArchivedInputPath) {
-      # Extremely rare. Add timestamp to the file name.
-      $nameNoExt = [System.IO.Path]::GetFileNameWithoutExtension($SelectedInputFile.Name)
-      $ext = [System.IO.Path]::GetExtension($SelectedInputFile.Name)
-      $ArchivedInputPath = Join-Path $JobDir ("{0}_{1}{2}" -f $nameNoExt, $Stamp, $ext)
-    }
-
-    try {
-      Move-Item -LiteralPath $SelectedInputFile.FullName -Destination $ArchivedInputPath -ErrorAction Stop
-    } catch {
-      Write-Host "[WARN] Could not move original input file into the job folder." -ForegroundColor Yellow
-      Write-Host "Source remains at:"
-      Write-Host "  $($SelectedInputFile.FullName)"
-      Write-Host "Move error: $($_.Exception.Message)" -ForegroundColor Yellow
-    }
-  } elseif ($SelectedFileIsInInputDir -and -not $MoveInputFolderFilesAfterProcessing) {
-    Write-Host "Input file is inside the Input folder; leaving original in place because config disables moving."
-  } else {
-    switch ($ExternalFileArchiveBehavior.Trim()) {
-      "LeaveOriginalInPlace" {
-        Write-Host "Input file is outside the Input folder; leaving original in place."
-      }
-      default {
-        Write-Host "Input file is outside the Input folder; leaving original in place."
-        Write-Host "ExternalFileArchiveBehavior is set to '$ExternalFileArchiveBehavior'; only LeaveOriginalInPlace is currently supported." -ForegroundColor Yellow
+    if ($InputFileIsInsideInputFolder -and $MoveInputFolderFilesAfterProcessing) {
+      Write-Info "Input file is inside the Input folder; moving original into job folder."
+      Move-Item -LiteralPath $SelectedInputFile.FullName -Destination $archivedOriginal -Force
+    } elseif (-not $InputFileIsInsideInputFolder) {
+      if ($ExternalFileArchiveBehavior -eq "CopyToJobFolder") {
+        Write-Info "External input file detected; original file will be copied into job folder."
+        Copy-Item -LiteralPath $SelectedInputFile.FullName -Destination $archivedOriginal -Force
+      } elseif ($ExternalFileArchiveBehavior -eq "LeaveOriginalInPlace") {
+        Write-Info "External input file detected; original file will be left in place."
+      } else {
+        Write-Info "External input file detected; original file is outside the Input folder; leaving original in place."
+        Write-Warn "ExternalFileArchiveBehavior is set to '$ExternalFileArchiveBehavior'; only LeaveOriginalInPlace is currently supported."
       }
     }
   }
@@ -607,10 +637,12 @@ function Invoke-TranscriptionFile {
   Write-Host ""
 
   if ($whisperExit -eq 0) {
-    Write-Host "[OK] Done. Files saved in:" -ForegroundColor Green
+    Write-Section "Complete"
+    Write-Ok "Done. Files saved in:"
     Write-Host "  $JobDir"
   } else {
-    Write-Host "[WARN] Whisper exited with code $whisperExit" -ForegroundColor Yellow
+    Write-Section "Complete"
+    Write-Warn "Whisper exited with code $whisperExit"
     Write-Host "Check output folder:"
     Write-Host "  $JobDir"
   }
@@ -635,26 +667,19 @@ function Invoke-TranscriptionFile {
 }
 
 if ($ParameterMode) {
-  if (-not (Test-Path -LiteralPath $InputFile -PathType Leaf)) {
-    Write-Host "Input file not found: $InputFile" -ForegroundColor Red
+  if (-not (Test-Path -LiteralPath $InputFile)) {
+    Write-Host "Input file was not found:"
+    Write-Host "  $InputFile"
     exit 1
   }
 
-  $SelectedInputFile = Get-Item -LiteralPath $InputFile
-
-  if ($SelectedInputFile.Extension -notmatch $ExtPattern) {
-    Write-Host "Input file type is not recognized: $($SelectedInputFile.Name)" -ForegroundColor Red
-    exit 1
-  }
-
-  $WhisperModel = if ([string]::IsNullOrWhiteSpace($Model)) { $DefaultModel } else { $Model }
-  $WhisperLanguage = if ([string]::IsNullOrWhiteSpace($Language)) { $DefaultLanguage } else { $Language }
+  $SelectedOutputMode = $NormalizedOutputMode
 
   $result = Invoke-TranscriptionFile `
-    -SelectedInputFile $SelectedInputFile `
-    -SelectedOutputMode $NormalizedOutputMode `
-    -WhisperModel $WhisperModel `
-    -WhisperLanguage $WhisperLanguage `
+    -SelectedInputFile (Get-Item -LiteralPath $InputFile) `
+    -SelectedOutputMode $SelectedOutputMode `
+    -WhisperModel $DefaultModel `
+    -WhisperLanguage $DefaultLanguage `
     -OpenFolderWhenDone:$false
 
   exit $result.ExitCode
@@ -667,17 +692,17 @@ if ($ParameterMode) {
     Sort-Object Name
 
   if (-not $mediaFiles -or $mediaFiles.Count -eq 0) {
-    Write-Host ""
-    Write-Host "No recognized media files found in:" -ForegroundColor Yellow
+    Write-Section "Input Folder"
+    Write-Warn "No recognized media files found in:"
     Write-Host "  $InputDir"
     Write-Host ""
-    Write-Host "Recognized formats:"
+    Write-Info "Recognized formats:"
     Write-Host "  mp4 mkv mov m4v avi webm | mp3 m4a wav aac flac ogg opus wma"
     Write-Host ""
     Write-Host "What would you like to do?"
-    Write-Host "  [R] Refresh / check again"
-    Write-Host "  [O] Open Input folder"
-    Write-Host "  [Q] Quit"
+    Write-Host "  [R] Refresh / check again" -ForegroundColor Yellow
+    Write-Host "  [O] Open Input folder" -ForegroundColor Yellow
+    Write-Host "  [Q] Quit" -ForegroundColor Yellow
 
     $noFilesChoice = Read-Host "Choice (R/O/Q, default R)"
     $noFilesChoice = $noFilesChoice.Trim().ToUpper()
@@ -695,11 +720,11 @@ if ($ParameterMode) {
       exit
     }
 
-    Write-Host "Invalid selection. Refreshing file list." -ForegroundColor Yellow
+    Write-Warn "Invalid selection. Refreshing file list."
     continue InteractiveLoop
   }
 
-  Write-Host ""
+  Write-Section "Recognized Files"
   Write-Host "Recognized files found:" -ForegroundColor Yellow
 
   for ($i = 0; $i -lt $mediaFiles.Count; $i++) {
@@ -707,10 +732,10 @@ if ($ParameterMode) {
   }
 
   if ($mediaFiles.Count -gt 1) {
-    Write-Host "  [B] Process all files"
+    Write-Host "  [B] Process all files" -ForegroundColor Yellow
   }
 
-  Write-Host "  [Q] Quit"
+  Write-Host "  [Q] Quit" -ForegroundColor Yellow
 
   $choice = Read-Host "Choose file number, B for all, or Q to quit"
   $trimmedChoice = $choice.Trim().ToUpper()
@@ -723,7 +748,7 @@ if ($ParameterMode) {
 
   if ($trimmedChoice -eq "B") {
     if ($mediaFiles.Count -le 1) {
-      Write-Host "Batch mode requires more than one recognized file." -ForegroundColor Yellow
+      Write-Warn "Batch mode requires more than one recognized file."
       Pause
       continue
     }
@@ -731,23 +756,28 @@ if ($ParameterMode) {
     $selectedFiles = @($mediaFiles)
     $batchMode = $true
   } elseif ($trimmedChoice -match '^\d+$') {
-    $selectedNumber = [int]$trimmedChoice
+    $index = [int]$trimmedChoice - 1
 
-    if ($selectedNumber -lt 1 -or $selectedNumber -gt $mediaFiles.Count) {
-      Write-Host "Invalid selection." -ForegroundColor Red
+    if ($index -lt 0 -or $index -ge $mediaFiles.Count) {
+      Write-Host "Invalid file number." -ForegroundColor Yellow
       Pause
       continue
     }
 
-    $selectedFiles = @($mediaFiles[$selectedNumber - 1])
+    $selectedFiles = @($mediaFiles[$index])
   } else {
-    Write-Host "Invalid selection." -ForegroundColor Red
+    Write-Host "Invalid selection." -ForegroundColor Yellow
     Pause
     continue
   }
 
+  if (-not $selectedFiles -or $selectedFiles.Count -eq 0) {
+    Write-Warn "No files selected. Refreshing file list."
+    continue
+  }
+
   $SelectedOutputMode = Select-OutputMode -DefaultOutputMode $NormalizedOutputMode
-  Write-Host "Output mode: $SelectedOutputMode"
+  Write-Info "Output mode selected: $SelectedOutputMode"
 
   $WhisperModel = Select-WhisperModel -DefaultModel $DefaultModel
   $WhisperLanguage = $DefaultLanguage
@@ -755,11 +785,10 @@ if ($ParameterMode) {
   cls
 
   if ($batchMode) {
-    Write-Host ""
-    Write-Host "Batch mode selected. Processing $($selectedFiles.Count) files."
-    Write-Host "Output mode: $SelectedOutputMode"
-    Write-Host "Whisper model: $WhisperModel"
-    Write-Host ""
+    Write-Section "Batch Settings"
+    Write-Info "Files selected: $($selectedFiles.Count)"
+    Write-Info "Output mode: $SelectedOutputMode"
+    Write-Info "Whisper model: $WhisperModel"
   }
 
   $results = @()
@@ -768,10 +797,8 @@ if ($ParameterMode) {
     $currentFile = $selectedFiles[$i]
 
     if ($batchMode) {
-      Write-Host ""
-      Write-Host "====================================================="
-      Write-Host "Batch item $($i + 1) of $($selectedFiles.Count): $($currentFile.Name)"
-      Write-Host "====================================================="
+      Write-Section "Batch Item $($i + 1) of $($selectedFiles.Count)"
+      Write-Info "File: $($currentFile.Name)"
     }
 
     $result = Invoke-TranscriptionFile `
@@ -785,17 +812,15 @@ if ($ParameterMode) {
   }
 
   if ($batchMode) {
-    Write-Host ""
-    Write-Host "Batch complete."
-    Write-Host ""
+    Write-Section "Batch Summary"
 
     foreach ($result in $results) {
       if ($result.Success) {
-        Write-Host "  [OK] $($result.FileName)" -ForegroundColor Green
+        Write-Ok "$($result.FileName)"
       } else {
-        Write-Host "  [WARN] $($result.FileName) - $($result.Message)" -ForegroundColor Yellow
+        Write-Warn "$($result.FileName) - $($result.Message)"
       }
-  }
+    }
 
     Write-Host ""
     Write-Host "Output folder:"
@@ -804,13 +829,13 @@ if ($ParameterMode) {
 
   $nextOpenTarget = if ($batchMode) { $OutputDir } else { $results[0].JobDir }
 
-  Write-Host ""
-  Write-Host "Processing complete."
+  Write-Section "Next Step"
+  Write-Ok "Processing complete."
   Write-Host ""
   Write-Host "What would you like to do next?"
-  Write-Host "  [R] Run again / return to file list"
-  Write-Host "  [O] Open output folder"
-  Write-Host "  [Q] Quit"
+  Write-Host "  [R] Run again / return to file list" -ForegroundColor Yellow
+  Write-Host "  [O] Open output folder" -ForegroundColor Yellow
+  Write-Host "  [Q] Quit" -ForegroundColor Yellow
 
   $nextChoice = Read-Host "Choice (R/O/Q, default Q)"
   $nextChoice = $nextChoice.Trim().ToUpper()
@@ -828,7 +853,6 @@ if ($ParameterMode) {
     exit
   }
 
-  Write-Host "Invalid selection. Exiting." -ForegroundColor Yellow
+  Write-Warn "Invalid selection. Exiting."
   exit
-
 } while ($true)

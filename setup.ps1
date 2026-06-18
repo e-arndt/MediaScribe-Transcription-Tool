@@ -884,13 +884,13 @@ Write-Host ""
 
 if ($dependencyResult.AllReady) {
     Write-Host "To use MediaScribe:"
-    Write-Host "  1. Put audio/video files in:"
-    Write-Host "     $inputFolder"
-    Write-Host ""
-    Write-Host "  2. Run:"
+    Write-Host "  Run this launcher:"
     Write-Host "     $launcherPath"
     Write-Host ""
-    Write-Host "  3. Transcripts and caption files will be created in:"
+    Write-Host "  Audio/video files go in:"
+    Write-Host "     $inputFolder"
+    Write-Host ""
+    Write-Host "  Transcripts and caption files will be created in:"
     Write-Host "     $outputFolder"
     Write-Host ""
 } else {
@@ -910,10 +910,24 @@ Write-Host "To remove MediaScribe, delete the installed MediaScribe folder:"
 Write-Host "  $installFolder"
 Write-Host ""
 
-$openFolder = Read-Host "Open the MediaScribe folder now? (Y/N, default Y)"
+if ($dependencyResult.AllReady) {
+    $runNow = Read-YesNo -Prompt "Run MediaScribe now? (Y/N, default Y)" -Default "Y"
 
-if ([string]::IsNullOrWhiteSpace($openFolder) -or $openFolder.Trim().ToUpper() -eq "Y") {
-    Start-Process explorer.exe -ArgumentList "`"$installFolder`""
+    if ($runNow -eq "Y") {
+        Write-Host ""
+        Write-Host "Starting MediaScribe..."
+        Write-Host ""
+
+        Push-Location $installFolder
+        try {
+            & $launcherPath
+        } finally {
+            Pop-Location
+        }
+    }
+} else {
+    Write-Host "MediaScribe was installed, but it cannot run yet because one or more dependencies are missing."
+    Write-Host "After fixing dependencies, run Install.bat again."
 }
 
 Write-Host ""
