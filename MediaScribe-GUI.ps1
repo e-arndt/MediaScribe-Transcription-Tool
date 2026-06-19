@@ -53,20 +53,10 @@ foreach ($folder in @($InputDir, $OutputDir)) {
     }
 }
 
-function Quote-Argument {
-    param([string]$Value)
-
-    if ($null -eq $Value) {
-        return '""'
-    }
-
-    return '"' + ($Value -replace '"', '\"') + '"'
-}
-
-function Append-Status {
+function Add-Status {
     param([string]$Text)
 
-    if ([string]::IsNullOrWhiteSpace($Text)) {
+    if ($null -eq $Text) {
         return
     }
 
@@ -293,8 +283,8 @@ $logTimer.Add_Tick({
 
                 $logTimer.Stop()
 
-                Append-Status ""
-                Append-Status "MediaScribe finished with exit code $exitCode."
+                Add-Status ""
+                Add-Status "MediaScribe finished with exit code $exitCode."
 
                 if ($exitCode -eq 0) {
                     $statusLabel.Text = "Status: Complete"
@@ -308,8 +298,8 @@ $logTimer.Add_Tick({
             }
         } catch {
             $logTimer.Stop()
-            Append-Status ""
-            Append-Status "MediaScribe process ended, but status could not be read."
+            Add-Status ""
+            Add-Status "MediaScribe process ended, but status could not be read."
             Set-RunningState -IsRunning $false
             $script:RunningProcess = $null
         }
@@ -371,12 +361,12 @@ $startButton.Add_Click({
     }
 
     $statusBox.Clear()
-    Append-Status "MediaScribe GUI started."
-    Append-Status "Selected file: $selectedFile"
-    Append-Status "Output mode: $selectedOutputMode"
-    Append-Status "Whisper model: $selectedModel"
-    Append-Status "Language: $selectedLanguage"
-    Append-Status ""
+    Add-Status "MediaScribe GUI started."
+    Add-Status "Selected file: $selectedFile"
+    Add-Status "Output mode: $selectedOutputMode"
+    Add-Status "Whisper model: $selectedModel"
+    Add-Status "Language: $selectedLanguage"
+    Add-Status ""
 
     Set-RunningState -IsRunning $true
 
@@ -412,19 +402,6 @@ $startButton.Add_Click({
 
         [void]$process.Start()
 
-        $stdOutLog = $script:CurrentLogFile
-        $stdErrLog = $script:CurrentLogFile
-
-        $outJob = Start-Job -ScriptBlock {
-            param($ProcessId, $LogPath)
-
-            $proc = [System.Diagnostics.Process]::GetProcessById($ProcessId)
-
-            while (-not $proc.HasExited) {
-                Start-Sleep -Milliseconds 250
-            }
-        } -ArgumentList $process.Id, $script:CurrentLogFile
-
         # Use background stream readers that append safely to the log file.
         $outputReader = {
             param($proc, $logPath)
@@ -454,8 +431,8 @@ $startButton.Add_Click({
 
         $logTimer.Start()
     } catch {
-        Append-Status "Failed to start transcription."
-        Append-Status $_.Exception.Message
+        Add-Status "Failed to start transcription."
+        Add-Status $_.Exception.Message
         Set-RunningState -IsRunning $false
         $script:RunningProcess = $null
         $logTimer.Stop()
@@ -495,8 +472,8 @@ $form.Add_FormClosing({
     }
 })
 
-Append-Status "MediaScribe GUI ready."
-Append-Status "Input folder: $InputDir"
-Append-Status "Output folder: $OutputDir"
+Add-Status "MediaScribe GUI ready."
+Add-Status "Input folder: $InputDir"
+Add-Status "Output folder: $OutputDir"
 
 [void]$form.ShowDialog()

@@ -803,14 +803,20 @@ $scriptRoot = $PSScriptRoot
 $sourceTranscribe = Join-Path $scriptRoot "transcribe.ps1"
 $sourceReadme = Join-Path $scriptRoot "README.md"
 $sourceHowToStart = Join-Path $scriptRoot "How to Start transcription.txt"
+$sourceGuiScript = Join-Path $scriptRoot "MediaScribe-GUI.ps1"
+$sourceGuiLauncher = Join-Path $scriptRoot "Start-MediaScribe-GUI.bat"
 
 $destTranscribe = Join-Path $installFolder "transcribe.ps1"
 $destReadme = Join-Path $installFolder "README.md"
 $destHowToStart = Join-Path $installFolder "How to Start transcription.txt"
+$destGuiScript = Join-Path $installFolder "MediaScribe-GUI.ps1"
+$destGuiLauncher = Join-Path $installFolder "Start-MediaScribe-GUI.bat"
 
 Copy-AppFile -SourcePath $sourceTranscribe -DestinationPath $destTranscribe -Required $true
 Copy-AppFile -SourcePath $sourceReadme -DestinationPath $destReadme -Required $false
 Copy-AppFile -SourcePath $sourceHowToStart -DestinationPath $destHowToStart -Required $false
+Copy-AppFile -SourcePath $sourceGuiScript -DestinationPath $destGuiScript -Required $true
+Copy-AppFile -SourcePath $sourceGuiLauncher -DestinationPath $destGuiLauncher -Required $true
 
 Write-Section "Creating Config"
 
@@ -911,18 +917,68 @@ Write-Host "  $installFolder"
 Write-Host ""
 
 if ($dependencyResult.AllReady) {
-    $runNow = Read-YesNo -Prompt "Run MediaScribe now? (Y/N, default Y)" -Default "Y"
+    $guiLauncherPath = Join-Path $installFolder "Start-MediaScribe-GUI.bat"
 
-    if ($runNow -eq "Y") {
-        Write-Host ""
-        Write-Host "Starting MediaScribe..."
-        Write-Host ""
+    Write-Host "Launch options:"
+    Write-Host "  [1] Start MediaScribe GUI"
+    Write-Host "  [2] Start MediaScribe Terminal"
+    Write-Host "  [Q] Quit setup"
+    Write-Host ""
 
-        Push-Location $installFolder
-        try {
-            & $launcherPath
-        } finally {
-            Pop-Location
+    $launchChoice = Read-Host "Choice (default 1)"
+
+    if ([string]::IsNullOrWhiteSpace($launchChoice)) {
+        $launchChoice = "1"
+    }
+
+    switch ($launchChoice.Trim().ToUpper()) {
+        "1" {
+            if (Test-Path -LiteralPath $guiLauncherPath -PathType Leaf) {
+                Write-Host ""
+                Write-Host "Starting MediaScribe GUI..."
+                Write-Host ""
+
+                Push-Location $installFolder
+                try {
+                    & $guiLauncherPath
+                } finally {
+                    Pop-Location
+                }
+            } else {
+                Write-Warn "GUI launcher was not found:"
+                Write-Host "  $guiLauncherPath"
+                Write-Host ""
+                Write-Host "Starting terminal version instead..."
+                Write-Host ""
+
+                Push-Location $installFolder
+                try {
+                    & $launcherPath
+                } finally {
+                    Pop-Location
+                }
+            }
+        }
+
+        "2" {
+            Write-Host ""
+            Write-Host "Starting MediaScribe Terminal..."
+            Write-Host ""
+
+            Push-Location $installFolder
+            try {
+                & $launcherPath
+            } finally {
+                Pop-Location
+            }
+        }
+
+        "Q" {
+            Write-Info "Setup finished without launching MediaScribe."
+        }
+
+        default {
+            Write-Warn "Unknown choice. Setup finished without launching MediaScribe."
         }
     }
 } else {
