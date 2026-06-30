@@ -193,7 +193,7 @@ function Set-RunningState {
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "MediaScribe"
-$form.Size = New-Object System.Drawing.Size(860, 730)
+$form.Size = New-Object System.Drawing.Size(860, 775)
 $form.StartPosition = "CenterScreen"
 $form.MinimumSize = New-Object System.Drawing.Size(820, 680)
 $form.WindowState = "Normal"
@@ -351,6 +351,13 @@ $clearStatusButton.Location = New-Object System.Drawing.Point(425, 344)
 $clearStatusButton.Size = New-Object System.Drawing.Size(130, 34)
 $form.Controls.Add($clearStatusButton)
 
+$closeButton = New-Object System.Windows.Forms.Button
+$closeButton.Text = "Close MediaScribe"
+$closeButton.Font = $fontButton
+$closeButton.Location = New-Object System.Drawing.Point(350, 675)
+$closeButton.Size = New-Object System.Drawing.Size(155, 34)
+$form.Controls.Add($closeButton)
+
 $statusLabel = New-Object System.Windows.Forms.Label
 $statusLabel.Text = "Status: Ready"
 $statusLabel.Font = $fontSection
@@ -477,6 +484,10 @@ $clearStatusButton.Add_Click({
     $statusBox.Clear()
 })
 
+$closeButton.Add_Click({
+    $form.Close()
+})
+
 $startButton.Add_Click({
     if (-not (Test-Path -LiteralPath $TranscribeScript)) {
         [System.Windows.Forms.MessageBox]::Show(
@@ -588,35 +599,22 @@ $startButton.Add_Click({
 })
 
 $form.Add_FormClosing({
+    if ($null -ne $script:RunningProcess -and -not $script:RunningProcess.HasExited) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "MediaScribe is still transcribing.`n`nPlease wait for the transcription to finish before closing MediaScribe.",
+            "Transcription Still Running",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        ) | Out-Null
+
+        $_.Cancel = $true
+        return
+    }
+
     try {
         $logTimer.Stop()
     } catch {
         # Ignore timer shutdown errors.
-    }
-
-    if ($null -ne $script:RunningProcess -and -not $script:RunningProcess.HasExited) {
-        $answer = [System.Windows.Forms.MessageBox]::Show(
-            "A transcription is still running. Close MediaScribe and stop the process?",
-            "MediaScribe",
-            [System.Windows.Forms.MessageBoxButtons]::YesNo,
-            [System.Windows.Forms.MessageBoxIcon]::Warning
-        )
-
-        if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) {
-            $_.Cancel = $true
-            try {
-                $logTimer.Start()
-            } catch {
-                # Ignore timer restart errors.
-            }
-            return
-        }
-
-        try {
-            $script:RunningProcess.Kill()
-        } catch {
-            # Ignore shutdown errors.
-        }
     }
 })
 
