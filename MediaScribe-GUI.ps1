@@ -6,6 +6,29 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+# Set the minimized support window title.
+$host.UI.RawUI.WindowTitle = "DO NOT CLOSE - MediaScribe Support Window"
+
+# Minimize only the PowerShell console window, not the MediaScribe GUI.
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+
+public class MediaScribeConsoleWindow {
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr GetConsoleWindow();
+
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+}
+"@
+
+$consoleHandle = [MediaScribeConsoleWindow]::GetConsoleWindow()
+if ($consoleHandle -ne [IntPtr]::Zero) {
+    # 6 = SW_MINIMIZE
+    [MediaScribeConsoleWindow]::ShowWindow($consoleHandle, 6) | Out-Null
+}
+
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $TranscribeScript = Join-Path $ScriptDir "transcribe.ps1"
 $ConfigPath = Join-Path $ScriptDir "config.json"
@@ -92,6 +115,8 @@ $form.Text = "MediaScribe"
 $form.Size = New-Object System.Drawing.Size(820, 620)
 $form.StartPosition = "CenterScreen"
 $form.MinimumSize = New-Object System.Drawing.Size(760, 560)
+$form.WindowState = "Normal"
+$form.ShowInTaskbar = $true
 
 $titleLabel = New-Object System.Windows.Forms.Label
 $titleLabel.Text = "MediaScribe"
