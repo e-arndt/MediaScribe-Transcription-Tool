@@ -76,6 +76,68 @@ foreach ($folder in @($InputDir, $OutputDir)) {
     }
 }
 
+$RecognizedExtensions = @(
+    ".mp4", ".mkv", ".mov", ".m4v", ".avi", ".webm",
+    ".mp3", ".m4a", ".wav", ".aac", ".flac", ".ogg", ".opus", ".wma"
+)
+
+$script:SourceFolder = $InputDir
+
+function Get-MediaFilesFromFolder {
+    param([string]$FolderPath)
+
+    if ([string]::IsNullOrWhiteSpace($FolderPath) -or -not (Test-Path -LiteralPath $FolderPath -PathType Container)) {
+        return @()
+    }
+
+    return Get-ChildItem -LiteralPath $FolderPath -File -ErrorAction SilentlyContinue |
+        Where-Object { $RecognizedExtensions -contains $_.Extension.ToLowerInvariant() } |
+        Sort-Object Name
+}
+
+function Refresh-FileList {
+    param([string]$FolderPath)
+
+    if ([string]::IsNullOrWhiteSpace($FolderPath) -or -not (Test-Path -LiteralPath $FolderPath -PathType Container)) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Choose a valid source folder.",
+            "MediaScribe",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        ) | Out-Null
+        return
+    }
+
+    $script:SourceFolder = $FolderPath
+    $sourceFolderTextBox.Text = $FolderPath
+
+    $fileCombo.Items.Clear()
+    $mediaFiles = Get-MediaFilesFromFolder -FolderPath $FolderPath
+
+    foreach ($mediaFile in $mediaFiles) {
+        [void]$fileCombo.Items.Add($mediaFile.Name)
+    }
+
+    if ($fileCombo.Items.Count -gt 0) {
+        $fileCombo.SelectedIndex = 0
+        $statusLabel.Text = "Status: Ready"
+    } else {
+        $statusLabel.Text = "Status: No recognized media files found"
+    }
+}
+
+function Get-SelectedMediaFile {
+    if ([string]::IsNullOrWhiteSpace($script:SourceFolder)) {
+        return $null
+    }
+
+    if ($null -eq $fileCombo.SelectedItem) {
+        return $null
+    }
+
+    return Join-Path $script:SourceFolder $fileCombo.SelectedItem.ToString()
+}
+
 function Add-Status {
     param([string]$Text)
 
@@ -91,7 +153,9 @@ function Add-Status {
 function Set-RunningState {
     param([bool]$IsRunning)
 
-    $browseButton.Enabled = -not $IsRunning
+    $browseFolderButton.Enabled = -not $IsRunning
+    $refreshFilesButton.Enabled = -not $IsRunning
+    $fileCombo.Enabled = -not $IsRunning
     $startButton.Enabled = -not $IsRunning
     $outputModeCombo.Enabled = -not $IsRunning
     $modelCombo.Enabled = -not $IsRunning
@@ -112,9 +176,9 @@ function Set-RunningState {
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "MediaScribe"
-$form.Size = New-Object System.Drawing.Size(820, 620)
+$form.Size = New-Object System.Drawing.Size(820, 690)
 $form.StartPosition = "CenterScreen"
-$form.MinimumSize = New-Object System.Drawing.Size(760, 560)
+$form.MinimumSize = New-Object System.Drawing.Size(760, 640)
 $form.WindowState = "Normal"
 $form.ShowInTaskbar = $true
 
@@ -133,26 +197,50 @@ $subtitleLabel.Size = New-Object System.Drawing.Size(760, 25)
 $form.Controls.Add($subtitleLabel)
 
 # -----------------------------
-# Selected file
+# Source folder and selected file
 # -----------------------------
+
+$sourceFolderLabel = New-Object System.Windows.Forms.Label
+$sourceFolderLabel.Text = "Source folder:"
+$sourceFolderLabel.Location = New-Object System.Drawing.Point(25, 95)
+$sourceFolderLabel.Size = New-Object System.Drawing.Size(120, 22)
+$form.Controls.Add($sourceFolderLabel)
+
+$sourceFolderTextBox = New-Object System.Windows.Forms.TextBox
+$sourceFolderTextBox.Location = New-Object System.Drawing.Point(25, 120)
+$sourceFolderTextBox.Size = New-Object System.Drawing.Size(500, 25)
+$sourceFolderTextBox.ReadOnly = $true
+$form.Controls.Add($sourceFolderTextBox)
+
+$browseFolderButton = New-Object System.Windows.Forms.Button
+$browseFolderButton.Text = "Browse Folder..."
+$browseFolderButton.Location = New-Object System.Drawing.Point(535, 118)
+$browseFolderButton.Size = New-Object System.Drawing.Size(120, 28)
+$form.Controls.Add($browseFolderButton)
+
+$refreshFilesButton = New-Object System.Windows.Forms.Button
+$refreshFilesButton.Text = "Refresh Files"
+$refreshFilesButton.Location = New-Object System.Drawing.Point(665, 118)
+$refreshFilesButton.Size = New-Object System.Drawing.Size(115, 28)
+$form.Controls.Add($refreshFilesButton)
 
 $fileLabel = New-Object System.Windows.Forms.Label
 $fileLabel.Text = "Selected file:"
-$fileLabel.Location = New-Object System.Drawing.Point(25, 95)
+$fileLabel.Location = New-Object System.Drawing.Point(25, 155)
 $fileLabel.Size = New-Object System.Drawing.Size(120, 22)
 $form.Controls.Add($fileLabel)
 
-$fileTextBox = New-Object System.Windows.Forms.TextBox
-$fileTextBox.Location = New-Object System.Drawing.Point(25, 120)
-$fileTextBox.Size = New-Object System.Drawing.Size(630, 25)
-$fileTextBox.ReadOnly = $true
-$form.Controls.Add($fileTextBox)
+$fileCombo = New-Object System.Windows.Forms.ComboBox
+$fileCombo.Location = New-Object System.Drawing.Point(25, 180)
+$fileCombo.Size = New-Object System.Drawing.Size(630, 25)
+$fileCombo.DropDownStyle = "DropDownList"
+$form.Controls.Add($fileCombo)
 
-$browseButton = New-Object System.Windows.Forms.Button
-$browseButton.Text = "Browse..."
-$browseButton.Location = New-Object System.Drawing.Point(670, 118)
-$browseButton.Size = New-Object System.Drawing.Size(110, 28)
-$form.Controls.Add($browseButton)
+$openInputButton = New-Object System.Windows.Forms.Button
+$openInputButton.Text = "Open Folder"
+$openInputButton.Location = New-Object System.Drawing.Point(670, 178)
+$openInputButton.Size = New-Object System.Drawing.Size(110, 28)
+$form.Controls.Add($openInputButton)
 
 # -----------------------------
 # Output mode
@@ -160,12 +248,12 @@ $form.Controls.Add($browseButton)
 
 $outputModeLabel = New-Object System.Windows.Forms.Label
 $outputModeLabel.Text = "Output mode:"
-$outputModeLabel.Location = New-Object System.Drawing.Point(25, 170)
+$outputModeLabel.Location = New-Object System.Drawing.Point(25, 230)
 $outputModeLabel.Size = New-Object System.Drawing.Size(140, 22)
 $form.Controls.Add($outputModeLabel)
 
 $outputModeCombo = New-Object System.Windows.Forms.ComboBox
-$outputModeCombo.Location = New-Object System.Drawing.Point(25, 195)
+$outputModeCombo.Location = New-Object System.Drawing.Point(25, 255)
 $outputModeCombo.Size = New-Object System.Drawing.Size(260, 25)
 $outputModeCombo.DropDownStyle = "DropDownList"
 [void]$outputModeCombo.Items.Add("Default - TXT only")
@@ -179,12 +267,12 @@ $form.Controls.Add($outputModeCombo)
 
 $modelLabel = New-Object System.Windows.Forms.Label
 $modelLabel.Text = "Transcription mode:"
-$modelLabel.Location = New-Object System.Drawing.Point(315, 170)
+$modelLabel.Location = New-Object System.Drawing.Point(315, 230)
 $modelLabel.Size = New-Object System.Drawing.Size(160, 22)
 $form.Controls.Add($modelLabel)
 
 $modelCombo = New-Object System.Windows.Forms.ComboBox
-$modelCombo.Location = New-Object System.Drawing.Point(315, 195)
+$modelCombo.Location = New-Object System.Drawing.Point(315, 255)
 $modelCombo.Size = New-Object System.Drawing.Size(260, 25)
 $modelCombo.DropDownStyle = "DropDownList"
 [void]$modelCombo.Items.Add("Fast - $DefaultModel")
@@ -198,12 +286,12 @@ $form.Controls.Add($modelCombo)
 
 $languageLabel = New-Object System.Windows.Forms.Label
 $languageLabel.Text = "Language:"
-$languageLabel.Location = New-Object System.Drawing.Point(605, 170)
+$languageLabel.Location = New-Object System.Drawing.Point(605, 230)
 $languageLabel.Size = New-Object System.Drawing.Size(120, 22)
 $form.Controls.Add($languageLabel)
 
 $languageTextBox = New-Object System.Windows.Forms.TextBox
-$languageTextBox.Location = New-Object System.Drawing.Point(605, 195)
+$languageTextBox.Location = New-Object System.Drawing.Point(605, 255)
 $languageTextBox.Size = New-Object System.Drawing.Size(175, 25)
 $languageTextBox.Text = $DefaultLanguage
 $form.Controls.Add($languageTextBox)
@@ -215,31 +303,25 @@ $form.Controls.Add($languageTextBox)
 $startButton = New-Object System.Windows.Forms.Button
 $startButton.Text = "Start Transcription"
 $startButton.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-$startButton.Location = New-Object System.Drawing.Point(25, 245)
+$startButton.Location = New-Object System.Drawing.Point(25, 305)
 $startButton.Size = New-Object System.Drawing.Size(180, 38)
 $form.Controls.Add($startButton)
 
-$openInputButton = New-Object System.Windows.Forms.Button
-$openInputButton.Text = "Open Input Folder"
-$openInputButton.Location = New-Object System.Drawing.Point(225, 250)
-$openInputButton.Size = New-Object System.Drawing.Size(155, 30)
-$form.Controls.Add($openInputButton)
-
 $openOutputButton = New-Object System.Windows.Forms.Button
 $openOutputButton.Text = "Open Output Folder"
-$openOutputButton.Location = New-Object System.Drawing.Point(395, 250)
+$openOutputButton.Location = New-Object System.Drawing.Point(225, 310)
 $openOutputButton.Size = New-Object System.Drawing.Size(165, 30)
 $form.Controls.Add($openOutputButton)
 
 $clearStatusButton = New-Object System.Windows.Forms.Button
 $clearStatusButton.Text = "Clear Status"
-$clearStatusButton.Location = New-Object System.Drawing.Point(575, 250)
+$clearStatusButton.Location = New-Object System.Drawing.Point(405, 310)
 $clearStatusButton.Size = New-Object System.Drawing.Size(120, 30)
 $form.Controls.Add($clearStatusButton)
 
 $statusLabel = New-Object System.Windows.Forms.Label
 $statusLabel.Text = "Status: Ready"
-$statusLabel.Location = New-Object System.Drawing.Point(25, 305)
+$statusLabel.Location = New-Object System.Drawing.Point(25, 365)
 $statusLabel.Size = New-Object System.Drawing.Size(755, 22)
 $form.Controls.Add($statusLabel)
 
@@ -248,8 +330,8 @@ $form.Controls.Add($statusLabel)
 # -----------------------------
 
 $statusBox = New-Object System.Windows.Forms.TextBox
-$statusBox.Location = New-Object System.Drawing.Point(25, 330)
-$statusBox.Size = New-Object System.Drawing.Size(755, 220)
+$statusBox.Location = New-Object System.Drawing.Point(25, 390)
+$statusBox.Size = New-Object System.Drawing.Size(755, 230)
 $statusBox.Multiline = $true
 $statusBox.ScrollBars = "Vertical"
 $statusBox.ReadOnly = $true
@@ -331,19 +413,27 @@ $logTimer.Add_Tick({
     }
 })
 
-$browseButton.Add_Click({
-    $dialog = New-Object System.Windows.Forms.OpenFileDialog
-    $dialog.Title = "Choose an audio or video file"
-    $dialog.InitialDirectory = $InputDir
-    $dialog.Filter = "Media files|*.mp4;*.mkv;*.mov;*.m4v;*.avi;*.webm;*.mp3;*.m4a;*.wav;*.aac;*.flac;*.ogg;*.opus;*.wma|All files|*.*"
+$browseFolderButton.Add_Click({
+    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dialog.Description = "Choose a folder that contains audio or video files"
+    $dialog.SelectedPath = $script:SourceFolder
+    $dialog.ShowNewFolderButton = $false
 
     if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        $fileTextBox.Text = $dialog.FileName
+        Refresh-FileList -FolderPath $dialog.SelectedPath
+        Add-Status "Source folder changed: $($dialog.SelectedPath)"
     }
 })
 
+$refreshFilesButton.Add_Click({
+    Refresh-FileList -FolderPath $script:SourceFolder
+    Add-Status "File list refreshed."
+})
+
 $openInputButton.Add_Click({
-    Start-Process explorer.exe $InputDir
+    if (Test-Path -LiteralPath $script:SourceFolder -PathType Container) {
+        Start-Process explorer.exe $script:SourceFolder
+    }
 })
 
 $openOutputButton.Add_Click({
@@ -365,11 +455,11 @@ $startButton.Add_Click({
         return
     }
 
-    $selectedFile = $fileTextBox.Text
+    $selectedFile = Get-SelectedMediaFile
 
     if ([string]::IsNullOrWhiteSpace($selectedFile) -or -not (Test-Path -LiteralPath $selectedFile)) {
         [System.Windows.Forms.MessageBox]::Show(
-            "Choose a valid audio or video file first.",
+            "Choose a valid audio or video file from the list first.",
             "MediaScribe",
             [System.Windows.Forms.MessageBoxButtons]::OK,
             [System.Windows.Forms.MessageBoxIcon]::Warning
@@ -500,5 +590,7 @@ $form.Add_FormClosing({
 Add-Status "MediaScribe GUI ready."
 Add-Status "Input folder: $InputDir"
 Add-Status "Output folder: $OutputDir"
+
+Refresh-FileList -FolderPath $script:SourceFolder
 
 [void]$form.ShowDialog()
