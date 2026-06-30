@@ -42,6 +42,15 @@ $fontButtonBold = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing
 $fontStatus = New-Object System.Drawing.Font("Consolas", 10)
 
 # -----------------------------
+# GUI colors
+# -----------------------------
+
+$colorFormBackground = [System.Drawing.Color]::FromArgb(218, 229, 231)
+$colorPanelBackground = [System.Drawing.Color]::FromArgb(245, 248, 248)
+$colorGroupText = [System.Drawing.Color]::FromArgb(0, 80, 95)
+$colorStartGreen = [System.Drawing.Color]::FromArgb(0, 128, 64)
+
+# -----------------------------
 # Paths and config
 # -----------------------------
 
@@ -193,190 +202,217 @@ function Set-RunningState {
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "MediaScribe"
-$form.Size = New-Object System.Drawing.Size(860, 775)
+$form.Size = New-Object System.Drawing.Size(880, 800)
 $form.StartPosition = "CenterScreen"
-$form.MinimumSize = New-Object System.Drawing.Size(820, 680)
+$form.MinimumSize = New-Object System.Drawing.Size(860, 775)
 $form.WindowState = "Normal"
 $form.ShowInTaskbar = $true
+$form.BackColor = $colorFormBackground
 
 $titleLabel = New-Object System.Windows.Forms.Label
 $titleLabel.Text = "MediaScribe"
 $titleLabel.Font = $fontHeader
 $titleLabel.Location = New-Object System.Drawing.Point(20, 15)
-$titleLabel.Size = New-Object System.Drawing.Size(800, 42)
+$titleLabel.Size = New-Object System.Drawing.Size(820, 42)
 $form.Controls.Add($titleLabel)
 
 $subtitleLabel = New-Object System.Windows.Forms.Label
 $subtitleLabel.Text = "Create transcripts and optional caption files from audio/video files."
 $subtitleLabel.Font = $fontSubtitle
 $subtitleLabel.Location = New-Object System.Drawing.Point(22, 58)
-$subtitleLabel.Size = New-Object System.Drawing.Size(800, 28)
+$subtitleLabel.Size = New-Object System.Drawing.Size(820, 28)
 $form.Controls.Add($subtitleLabel)
 
 # -----------------------------
-# Source folder and selected file
+# Group boxes
+# -----------------------------
+
+$filesGroup = New-Object System.Windows.Forms.GroupBox
+$filesGroup.Text = "Files"
+$filesGroup.Font = $fontSection
+$filesGroup.Location = New-Object System.Drawing.Point(20, 95)
+$filesGroup.Size = New-Object System.Drawing.Size(825, 155)
+$filesGroup.BackColor = $colorPanelBackground
+$filesGroup.ForeColor = $colorGroupText
+$form.Controls.Add($filesGroup)
+
+$settingsGroup = New-Object System.Windows.Forms.GroupBox
+$settingsGroup.Text = "Transcription Settings"
+$settingsGroup.Font = $fontSection
+$settingsGroup.Location = New-Object System.Drawing.Point(20, 265)
+$settingsGroup.Size = New-Object System.Drawing.Size(825, 115)
+$settingsGroup.BackColor = $colorPanelBackground
+$settingsGroup.ForeColor = $colorGroupText
+$form.Controls.Add($settingsGroup)
+
+$statusGroup = New-Object System.Windows.Forms.GroupBox
+$statusGroup.Text = "Status"
+$statusGroup.Font = $fontSection
+$statusGroup.Location = New-Object System.Drawing.Point(20, 455)
+$statusGroup.Size = New-Object System.Drawing.Size(825, 250)
+$statusGroup.BackColor = $colorPanelBackground
+$statusGroup.ForeColor = $colorGroupText
+$form.Controls.Add($statusGroup)
+
+# -----------------------------
+# Files group controls
 # -----------------------------
 
 $sourceFolderLabel = New-Object System.Windows.Forms.Label
 $sourceFolderLabel.Text = "Source folder:"
 $sourceFolderLabel.Font = $fontSection
-$sourceFolderLabel.Location = New-Object System.Drawing.Point(25, 105)
+$sourceFolderLabel.Location = New-Object System.Drawing.Point(15, 28)
 $sourceFolderLabel.Size = New-Object System.Drawing.Size(160, 25)
-$form.Controls.Add($sourceFolderLabel)
+$filesGroup.Controls.Add($sourceFolderLabel)
 
 $sourceFolderTextBox = New-Object System.Windows.Forms.TextBox
 $sourceFolderTextBox.Font = $fontMain
-$sourceFolderTextBox.Location = New-Object System.Drawing.Point(25, 132)
+$sourceFolderTextBox.Location = New-Object System.Drawing.Point(15, 55)
 $sourceFolderTextBox.Size = New-Object System.Drawing.Size(520, 27)
 $sourceFolderTextBox.ReadOnly = $true
-$form.Controls.Add($sourceFolderTextBox)
+$filesGroup.Controls.Add($sourceFolderTextBox)
 
 $browseFolderButton = New-Object System.Windows.Forms.Button
 $browseFolderButton.Text = "Browse Folder..."
 $browseFolderButton.Font = $fontButton
-$browseFolderButton.Location = New-Object System.Drawing.Point(555, 130)
+$browseFolderButton.Location = New-Object System.Drawing.Point(545, 53)
 $browseFolderButton.Size = New-Object System.Drawing.Size(135, 32)
-$form.Controls.Add($browseFolderButton)
+$filesGroup.Controls.Add($browseFolderButton)
 
 $refreshFilesButton = New-Object System.Windows.Forms.Button
 $refreshFilesButton.Text = "Refresh Files"
 $refreshFilesButton.Font = $fontButton
-$refreshFilesButton.Location = New-Object System.Drawing.Point(700, 130)
-$refreshFilesButton.Size = New-Object System.Drawing.Size(125, 32)
-$form.Controls.Add($refreshFilesButton)
+$refreshFilesButton.Location = New-Object System.Drawing.Point(690, 53)
+$refreshFilesButton.Size = New-Object System.Drawing.Size(115, 32)
+$filesGroup.Controls.Add($refreshFilesButton)
 
 $fileLabel = New-Object System.Windows.Forms.Label
 $fileLabel.Text = "Selected file:"
 $fileLabel.Font = $fontSection
-$fileLabel.Location = New-Object System.Drawing.Point(25, 174)
+$fileLabel.Location = New-Object System.Drawing.Point(15, 92)
 $fileLabel.Size = New-Object System.Drawing.Size(160, 25)
-$form.Controls.Add($fileLabel)
+$filesGroup.Controls.Add($fileLabel)
 
 $fileCombo = New-Object System.Windows.Forms.ComboBox
 $fileCombo.Font = $fontMain
-$fileCombo.Location = New-Object System.Drawing.Point(25, 202)
-$fileCombo.Size = New-Object System.Drawing.Size(665, 28)
+$fileCombo.Location = New-Object System.Drawing.Point(15, 118)
+$fileCombo.Size = New-Object System.Drawing.Size(650, 28)
 $fileCombo.DropDownStyle = "DropDownList"
-$form.Controls.Add($fileCombo)
+$filesGroup.Controls.Add($fileCombo)
 
 $openInputButton = New-Object System.Windows.Forms.Button
-$openInputButton.Text = "Open Folder"
+$openInputButton.Text = "Open Source Folder"
 $openInputButton.Font = $fontButton
-$openInputButton.Location = New-Object System.Drawing.Point(700, 200)
-$openInputButton.Size = New-Object System.Drawing.Size(125, 32)
-$form.Controls.Add($openInputButton)
+$openInputButton.Location = New-Object System.Drawing.Point(675, 115)
+$openInputButton.Size = New-Object System.Drawing.Size(135, 32)
+$filesGroup.Controls.Add($openInputButton)
 
 # -----------------------------
-# Output mode
+# Settings group controls
 # -----------------------------
 
 $outputModeLabel = New-Object System.Windows.Forms.Label
 $outputModeLabel.Text = "Output mode:"
 $outputModeLabel.Font = $fontSection
-$outputModeLabel.Location = New-Object System.Drawing.Point(25, 255)
+$outputModeLabel.Location = New-Object System.Drawing.Point(15, 30)
 $outputModeLabel.Size = New-Object System.Drawing.Size(160, 25)
-$form.Controls.Add($outputModeLabel)
+$settingsGroup.Controls.Add($outputModeLabel)
 
 $outputModeCombo = New-Object System.Windows.Forms.ComboBox
 $outputModeCombo.Font = $fontMain
-$outputModeCombo.Location = New-Object System.Drawing.Point(25, 283)
+$outputModeCombo.Location = New-Object System.Drawing.Point(15, 58)
 $outputModeCombo.Size = New-Object System.Drawing.Size(280, 28)
 $outputModeCombo.DropDownStyle = "DropDownList"
 [void]$outputModeCombo.Items.Add("Default - TXT only")
 [void]$outputModeCombo.Items.Add("Full - TXT, SRT, VTT, TSV, JSON")
 $outputModeCombo.SelectedIndex = 0
-$form.Controls.Add($outputModeCombo)
-
-# -----------------------------
-# Model / transcription mode
-# -----------------------------
+$settingsGroup.Controls.Add($outputModeCombo)
 
 $modelLabel = New-Object System.Windows.Forms.Label
 $modelLabel.Text = "Transcription mode:"
 $modelLabel.Font = $fontSection
-$modelLabel.Location = New-Object System.Drawing.Point(335, 255)
+$modelLabel.Location = New-Object System.Drawing.Point(325, 30)
 $modelLabel.Size = New-Object System.Drawing.Size(210, 25)
-$form.Controls.Add($modelLabel)
+$settingsGroup.Controls.Add($modelLabel)
 
 $modelCombo = New-Object System.Windows.Forms.ComboBox
 $modelCombo.Font = $fontMain
-$modelCombo.Location = New-Object System.Drawing.Point(335, 283)
+$modelCombo.Location = New-Object System.Drawing.Point(325, 58)
 $modelCombo.Size = New-Object System.Drawing.Size(270, 28)
 $modelCombo.DropDownStyle = "DropDownList"
 [void]$modelCombo.Items.Add("Fast - $DefaultModel")
 [void]$modelCombo.Items.Add("Accurate - large")
 $modelCombo.SelectedIndex = 0
-$form.Controls.Add($modelCombo)
-
-# -----------------------------
-# Language
-# -----------------------------
+$settingsGroup.Controls.Add($modelCombo)
 
 $languageLabel = New-Object System.Windows.Forms.Label
 $languageLabel.Text = "Language:"
 $languageLabel.Font = $fontSection
-$languageLabel.Location = New-Object System.Drawing.Point(635, 255)
+$languageLabel.Location = New-Object System.Drawing.Point(625, 30)
 $languageLabel.Size = New-Object System.Drawing.Size(140, 25)
-$form.Controls.Add($languageLabel)
+$settingsGroup.Controls.Add($languageLabel)
 
 $languageTextBox = New-Object System.Windows.Forms.TextBox
 $languageTextBox.Font = $fontMain
-$languageTextBox.Location = New-Object System.Drawing.Point(635, 283)
-$languageTextBox.Size = New-Object System.Drawing.Size(190, 27)
+$languageTextBox.Location = New-Object System.Drawing.Point(625, 58)
+$languageTextBox.Size = New-Object System.Drawing.Size(180, 27)
 $languageTextBox.Text = $DefaultLanguage
-$form.Controls.Add($languageTextBox)
+$settingsGroup.Controls.Add($languageTextBox)
 
 # -----------------------------
-# Buttons
+# Action buttons
 # -----------------------------
 
 $startButton = New-Object System.Windows.Forms.Button
 $startButton.Text = "Start Transcription"
 $startButton.Font = $fontButtonBold
-$startButton.Location = New-Object System.Drawing.Point(25, 338)
+$startButton.Location = New-Object System.Drawing.Point(60, 390)
 $startButton.Size = New-Object System.Drawing.Size(190, 42)
+$startButton.BackColor = $colorStartGreen
+$startButton.ForeColor = [System.Drawing.Color]::White
+$startButton.FlatStyle = "Flat"
 $form.Controls.Add($startButton)
 
 $openOutputButton = New-Object System.Windows.Forms.Button
 $openOutputButton.Text = "Open Output Folder"
 $openOutputButton.Font = $fontButton
-$openOutputButton.Location = New-Object System.Drawing.Point(235, 344)
+$openOutputButton.Location = New-Object System.Drawing.Point(350, 395)
 $openOutputButton.Size = New-Object System.Drawing.Size(175, 34)
 $form.Controls.Add($openOutputButton)
 
 $clearStatusButton = New-Object System.Windows.Forms.Button
-$clearStatusButton.Text = "Clear Status"
+$clearStatusButton.Text = "Clear Status Window"
 $clearStatusButton.Font = $fontButton
-$clearStatusButton.Location = New-Object System.Drawing.Point(425, 344)
-$clearStatusButton.Size = New-Object System.Drawing.Size(130, 34)
+$clearStatusButton.Location = New-Object System.Drawing.Point(650, 395)
+$clearStatusButton.Size = New-Object System.Drawing.Size(150, 34)
 $form.Controls.Add($clearStatusButton)
 
 $closeButton = New-Object System.Windows.Forms.Button
 $closeButton.Text = "Close MediaScribe"
 $closeButton.Font = $fontButton
-$closeButton.Location = New-Object System.Drawing.Point(350, 675)
-$closeButton.Size = New-Object System.Drawing.Size(155, 34)
+$closeButton.Location = New-Object System.Drawing.Point(350, 715)
+$closeButton.Size = New-Object System.Drawing.Size(170, 34)
 $form.Controls.Add($closeButton)
+
+# -----------------------------
+# Status group controls
+# -----------------------------
 
 $statusLabel = New-Object System.Windows.Forms.Label
 $statusLabel.Text = "Status: Ready"
 $statusLabel.Font = $fontSection
-$statusLabel.Location = New-Object System.Drawing.Point(25, 405)
-$statusLabel.Size = New-Object System.Drawing.Size(800, 25)
-$form.Controls.Add($statusLabel)
-
-# -----------------------------
-# Status output
-# -----------------------------
+$statusLabel.Location = New-Object System.Drawing.Point(15, 28)
+$statusLabel.Size = New-Object System.Drawing.Size(790, 25)
+$statusGroup.Controls.Add($statusLabel)
 
 $statusBox = New-Object System.Windows.Forms.TextBox
-$statusBox.Location = New-Object System.Drawing.Point(25, 435)
-$statusBox.Size = New-Object System.Drawing.Size(800, 235)
+$statusBox.Location = New-Object System.Drawing.Point(15, 58)
+$statusBox.Size = New-Object System.Drawing.Size(790, 175)
 $statusBox.Multiline = $true
 $statusBox.ScrollBars = "Vertical"
 $statusBox.ReadOnly = $true
 $statusBox.Font = $fontStatus
-$form.Controls.Add($statusBox)
+$statusGroup.Controls.Add($statusBox)
 
 # -----------------------------
 # Events
