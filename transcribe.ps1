@@ -463,7 +463,7 @@ function Select-OutputMode {
   Write-Host "  [F] Full    - Original file, WAV audio, TXT, SRT, VTT, TSV, JSON" -ForegroundColor Green
   Write-Host ""
   Write-DefaultLine "Default: $defaultLabel"
-  $modeChoice = Read-Host "Output mode (D/F, default $defaultLabel)"
+  $modeChoice = Read-Host "Output mode (D/F, default D)"
 
   if ([string]::IsNullOrWhiteSpace($modeChoice)) {
     return $DefaultOutputMode
