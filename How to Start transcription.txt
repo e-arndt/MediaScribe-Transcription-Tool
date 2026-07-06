@@ -1,28 +1,25 @@
-MediaScribe - Quick Start
+MediaScribe - Quick Start / How to Use
 
-MediaScribe creates transcripts and caption files from audio/video files.
+MediaScribe creates transcripts and optional caption files from audio/video files.
 
-There are two main steps:
+It can be used with:
 
-1. Install MediaScribe
-2. Use MediaScribe
+1. The MediaScribe GUI - recommended for most users
+2. The MediaScribe Terminal version - useful as a fallback or for troubleshooting
+
+MediaScribe is especially useful after old family recordings have been digitized, such as VHS, VHS-C, 8mm film, Super 8 film, Video8, Hi8, audio cassette, reel-to-reel recordings, talks, interviews, family stories, lessons, meetings, and other spoken audio/video files.
 
 ============================================================
-
 1. INSTALL MEDIASCRIBE
-   ============================================================
+============================================================
 
-Open the folder where you downloaded or copied MediaScribe.
+Open the folder where you downloaded, extracted, or copied MediaScribe.
 
 This might be a USB drive, Downloads folder, Desktop folder, project folder, or extracted ZIP folder.
 
 In that folder, double-click:
 
 Install.bat
-
-or:
-
-Install-MediaScribe.bat
 
 The installer will start PowerShell and run setup.ps1 for you.
 
@@ -40,23 +37,34 @@ Logs
 Models
 Tools
 
-Setup will also create:
+Setup will also create launchers for using MediaScribe.
+
+The main GUI launcher is:
+
+Start-MediaScribe-GUI.bat
+
+The terminal launcher is:
 
 MediaScribe.bat
 
-That is the normal launcher you use after installation.
+or:
 
-If setup completes successfully and all required dependencies are available, the installer may ask:
+Start-MediaScribe.bat
 
-Run MediaScribe now? (Y/N, default Y)
+The exact launcher names may vary slightly depending on the package version, but the GUI launcher is the recommended choice for most users.
 
-Press Enter or choose Y to start MediaScribe immediately.
+If setup completes successfully and all required dependencies are available, the installer may offer launch options such as:
 
-Choose N if you want to run MediaScribe later.
+[1] Start MediaScribe GUI
+[2] Start MediaScribe Terminal
+[3] Open Instructions
+[Q] Quit setup
+
+Choose the GUI for normal use.
 
 ============================================================
 2. REINSTALLING OR REPAIRING MEDIASCRIBE
-========================================
+============================================================
 
 You can run Install.bat again to reinstall or repair MediaScribe.
 
@@ -65,9 +73,11 @@ This is useful if core app files were damaged, deleted, or need to be updated.
 During reinstall or repair, setup may replace the core app files, including:
 
 transcribe.ps1
+MediaScribe-GUI.ps1
 README.md
 How to Start transcription.txt
 MediaScribe.bat
+Start-MediaScribe-GUI.bat
 config.json
 
 Setup recreates required folders if they are missing.
@@ -86,7 +96,7 @@ To remove MediaScribe, delete the installed MediaScribe folder.
 
 ============================================================
 3. DEPENDENCIES
-===============
+============================================================
 
 MediaScribe requires:
 
@@ -132,10 +142,10 @@ If setup says a dependency is missing, MediaScribe files may still be installed,
 After fixing missing dependencies or internet access, run Install.bat again to re-check setup.
 
 ============================================================
-4. USE MEDIASCRIBE
-==================
+4. USE MEDIASCRIBE GUI
+============================================================
 
-After setup finishes, you can use MediaScribe right away if setup asks to run it.
+After setup finishes, choose the GUI launch option if offered.
 
 To use MediaScribe later, open the installed MediaScribe folder.
 
@@ -143,7 +153,59 @@ Example:
 
 Documents\MediaScribe
 
-Put one or more audio or video files into the Input folder.
+Then double-click:
+
+Start-MediaScribe-GUI.bat
+
+The GUI is recommended for most users.
+
+When the GUI opens, it shows:
+
+Files
+Transcription Settings
+Status
+Start Transcription
+Open Output Folder
+Clear Status Window
+Close MediaScribe
+
+A minimized PowerShell support window may also appear on the taskbar.
+
+Do not close the support window while MediaScribe is running.
+
+Close MediaScribe from the GUI when you are finished.
+
+============================================================
+5. CHOOSE FILES IN THE GUI
+============================================================
+
+The GUI uses a Source folder.
+
+By default, the Source folder is the MediaScribe Input folder.
+
+You can:
+
+1. Put audio/video files into the Input folder
+2. Start the GUI
+3. Choose a file from the Selected file dropdown
+
+You can also use:
+
+Browse Folder
+
+to choose another folder, such as a USB drive, Downloads folder, Desktop folder, or external drive.
+
+Use:
+
+Refresh Files
+
+to rescan the current Source folder.
+
+Use:
+
+Open Source Folder
+
+to open the current Source folder in File Explorer.
 
 Recognized video files:
 
@@ -153,23 +215,237 @@ Recognized audio files:
 
 MP3, M4A, WAV, AAC, FLAC, OGG, OPUS, WMA
 
-Then start MediaScribe by double-clicking:
+============================================================
+6. TRANSCRIPTION SETTINGS IN THE GUI
+============================================================
+
+The GUI has four main settings.
+
+------------------------------------------------------------
+Output mode
+------------------------------------------------------------
+
+Default - TXT only
+
+This is recommended for most users.
+
+Default mode creates:
+
+Original file
+WAV audio
+TXT transcript
+
+Full - TXT, SRT, VTT, TSV, JSON
+
+Use Full mode when you need caption/subtitle files or detailed Whisper output.
+
+Full mode creates:
+
+Original file
+WAV audio
+TXT transcript
+SRT subtitle file
+VTT subtitle file
+TSV timing file
+JSON Whisper output
+
+SRT and VTT files are useful for video captions/subtitles.
+
+------------------------------------------------------------
+Transcription mode
+------------------------------------------------------------
+
+Fast - recommended
+
+This is recommended for most users.
+
+Fast uses the configured/default Whisper model.
+
+Accurate - slower, for difficult audio
+
+This uses the large Whisper model.
+
+It is slower, but may help when audio is harder to understand or Fast mode misses words.
+
+------------------------------------------------------------
+Input Audio
+------------------------------------------------------------
+
+Input Audio means the language being spoken in the recording.
+
+Options include:
+
+English
+Auto-detect
+Chinese
+French
+German
+Italian
+Japanese
+Korean
+Portuguese
+Spanish
+
+English is the default.
+
+Use Auto-detect if you are not sure what language is being spoken.
+
+If you know the language, choosing it directly may give more consistent results.
+
+Example:
+
+If the audio is Korean, choose:
+
+Korean
+
+If the audio is English, choose:
+
+English
+
+------------------------------------------------------------
+Output Text
+------------------------------------------------------------
+
+Output Text controls what kind of text MediaScribe creates.
+
+Same as input / detected
+
+This creates a transcript in the same language as the audio.
+
+Examples:
+
+English audio -> English transcript
+Korean audio -> Korean transcript
+Auto-detect Korean audio -> Korean transcript
+
+English translation
+
+This asks Whisper to translate the spoken audio into English.
+
+Examples:
+
+Korean audio -> English text
+Spanish audio -> English text
+Auto-detect Korean audio -> English text
+
+Important:
+
+Whisper's built-in translation mode translates to English.
+
+MediaScribe does not currently translate into every possible output language.
+
+============================================================
+7. LIVE PREVIEW BEHAVIOR
+============================================================
+
+For English transcription, MediaScribe can show live transcript preview lines while Whisper is working.
+
+For Auto-detect, non-English input, or English translation, live preview is hidden.
+
+This is intentional.
+
+Some languages use characters that may not display correctly in the Windows status window.
+
+When live preview is hidden, MediaScribe still creates the final transcript file.
+
+The GUI may show messages such as:
+
+Live transcript preview is not shown for this language/output setting.
+Some characters may not display correctly in the Windows status window.
+English translation and non-English transcription still create the final transcript file.
+
+This is normal.
+
+============================================================
+8. START TRANSCRIPTION
+============================================================
+
+After choosing the file and settings, click:
+
+Start Transcription
+
+MediaScribe will:
+
+1. Extract WAV audio with FFmpeg
+2. Run OpenAI Whisper
+3. Create the selected transcript/output files
+4. Move or copy the original file according to MediaScribe's file handling rules
+5. Save results in the Output folder
+
+Long recordings may take several minutes or more.
+
+Accurate mode is slower than Fast mode.
+
+============================================================
+9. FIND RESULTS
+============================================================
+
+Results are saved in the Output folder.
+
+Each file gets its own output folder.
+
+Example:
+
+Output\My Recording
+
+In Default mode, the job folder contains:
+
+My Recording.mp4
+My Recording.wav
+My Recording.txt
+
+In Full mode, the job folder may contain:
+
+My Recording.mp4
+My Recording.wav
+My Recording.txt
+My Recording.srt
+My Recording.vtt
+My Recording.tsv
+My Recording.json
+
+For Auto-detect, non-English, or English translation jobs, the folder may also contain:
+
+whisper_stdout.log
+whisper_stderr.log
+
+These log files are normal.
+
+They keep Whisper's progress/debug output out of the GUI status window.
+
+============================================================
+10. FILE HANDLING
+============================================================
+
+Files placed inside the Input folder are moved into their output/job folder after successful processing.
+
+External files selected from another folder are left in place by default.
+
+This behavior helps preserve original media while keeping completed jobs organized.
+
+The original file is moved only after the expected transcript output is created.
+
+If transcription fails, the original file should remain in place.
+
+============================================================
+11. USE MEDIASCRIBE TERMINAL VERSION
+============================================================
+
+The GUI is recommended for most users.
+
+The terminal version is still available as a fallback.
+
+To use the terminal version, open the installed MediaScribe folder and double-click:
 
 MediaScribe.bat
 
-You can also run it from PowerShell with:
+or:
 
-.\MediaScribe.bat
+Start-MediaScribe.bat
 
-Install.bat is for installing, reinstalling, or repairing MediaScribe.
+The terminal version shows a welcome screen, then lets you choose files from the Input folder.
 
-MediaScribe.bat is the normal launcher for using MediaScribe after installation.
-
-============================================================
-5. START SCREEN
-===============
-
-When MediaScribe starts, it shows a welcome screen with:
+When MediaScribe starts, it shows:
 
 What MediaScribe does
 Default output information
@@ -180,10 +456,6 @@ Input folder location
 Output folder location
 
 Press Enter to continue.
-
-============================================================
-6. CHOOSE WHAT TO TRANSCRIBE
-============================
 
 MediaScribe will show a list of recognized files.
 
@@ -209,10 +481,10 @@ If no files are found, you can add files to the Input folder and choose Refresh.
 Pressing Enter refreshes.
 
 ============================================================
-7. CHOOSE OUTPUT FILES
-======================
+12. TERMINAL OUTPUT MODES
+============================================================
 
-MediaScribe will ask what output files you want.
+The terminal version asks what output files you want.
 
 [D] Default - Original file, WAV audio, TXT transcript
 [F] Full    - Original file, WAV audio, TXT, SRT, VTT, TSV, JSON
@@ -221,15 +493,11 @@ Default mode is recommended for most users.
 
 Use Full mode when you need caption/subtitle files or detailed Whisper output.
 
-Caption use:
-
-Use SRT or VTT files for video caption/subtitle workflows.
-
 ============================================================
-8. CHOOSE TRANSCRIPTION MODE
-============================
+13. TERMINAL TRANSCRIPTION MODES
+============================================================
 
-MediaScribe will ask which transcription mode to use.
+The terminal version asks which transcription mode to use.
 
 [F] Fast     - Uses the configured/default Whisper model
 [A] Accurate - Uses the large Whisper model
@@ -241,55 +509,10 @@ Fast mode is recommended for most users.
 Accurate mode is slower and may help when audio is harder to understand or Fast mode misses words.
 
 ============================================================
-9. WHILE TRANSCRIBING
-=====================
-
-MediaScribe first extracts audio with FFmpeg.
-
-Then MediaScribe runs OpenAI Whisper.
-
-During Whisper transcription, live transcript progress appears below the Transcribing section.
-
-This progress may appear in chunks and may take a while, especially for longer files or larger Whisper models.
-
-This is normal.
-
+14. AFTER PROCESSING
 ============================================================
-10. FIND RESULTS
-================
 
-Results are saved in the Output folder.
-
-Each file gets its own output folder.
-
-Example:
-
-Output\My Recording
-My Recording.mp3
-My Recording.wav
-My Recording.txt
-
-In Default mode, MediaScribe creates:
-
-Original file
-WAV audio
-TXT transcript
-
-In Full mode, MediaScribe creates:
-
-Original file
-WAV audio
-TXT transcript
-SRT subtitle file
-VTT subtitle file
-TSV timing file
-JSON Whisper output
-
-============================================================
-11. AFTER PROCESSING
-====================
-
-After processing finishes, MediaScribe asks what to do next.
+After processing finishes, MediaScribe may ask what to do next.
 
 [R] Run again / return to file list
 [O] Open output folder
@@ -298,17 +521,55 @@ After processing finishes, MediaScribe asks what to do next.
 Pressing Enter quits.
 
 ============================================================
-NOTES
-=====
+15. COMMON FAMILY HISTORY USES
+============================================================
+
+MediaScribe can help create searchable written transcripts from digitized family media, such as:
+
+Family interviews
+Home movie narration
+Oral histories
+Family stories
+Funeral talks
+Memorial recordings
+Family gatherings
+Personal memories
+Church talks
+Lessons
+Discussions
+Meetings
+Dictation
+Other spoken recordings
+
+A common workflow is:
+
+1. Digitize the tape, film, or recording into a video/audio file
+2. Open MediaScribe GUI
+3. Choose the folder that contains the digitized file
+4. Choose the file
+5. Choose the language spoken in the recording
+6. Choose whether to keep the original-language transcript or translate to English
+7. Start transcription
+8. Save or share the TXT transcript
+
+============================================================
+16. NOTES
+============================================================
 
 DRM/protected media may fail.
 
+Damaged media files may fail.
+
 Audio is extracted only and converted to mono 16 kHz WAV for consistency.
 
-Files inside the Input folder are moved into their output folder after successful processing.
+Default mode is recommended for most users.
 
-External files processed through command-line parameter mode are left in place.
+Full mode is useful for caption/subtitle workflows.
 
-Install.bat or Install-MediaScribe.bat is only used to install, reinstall, or repair MediaScribe.
+Input Audio means the language spoken in the recording.
 
-After installation, use MediaScribe.bat from the installed MediaScribe folder.
+Output Text controls whether the final TXT is in the original/detected language or translated to English.
+
+Install.bat is only used to install, reinstall, or repair MediaScribe.
+
+After installation, use the GUI launcher or MediaScribe.bat from the installed MediaScribe folder.
