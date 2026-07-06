@@ -6,6 +6,26 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+function Initialize-MediaScribeGuiUtf8Output {
+    try {
+        $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+
+        [Console]::OutputEncoding = $utf8NoBom
+        [Console]::InputEncoding = $utf8NoBom
+
+        $script:OutputEncoding = $utf8NoBom
+        $global:OutputEncoding = $utf8NoBom
+    } catch {
+        # Ignore encoding setup errors.
+    }
+
+    # Child PowerShell / Python / Whisper processes inherit these.
+    $env:PYTHONIOENCODING = "utf-8"
+    $env:PYTHONUTF8 = "1"
+}
+
+Initialize-MediaScribeGuiUtf8Output
+
 # Set the minimized support window title.
 $host.UI.RawUI.WindowTitle = "DO NOT CLOSE - MediaScribe Support Window"
 
@@ -481,7 +501,8 @@ $logTimer.Add_Tick({
 
                 try {
                     $stream.Seek($script:LastLogLength, [System.IO.SeekOrigin]::Begin) | Out-Null
-                    $reader = New-Object System.IO.StreamReader($stream)
+                    $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+                    $reader = New-Object System.IO.StreamReader($stream, $utf8NoBom, $true)
                     $newText = $reader.ReadToEnd()
 
                     if (-not [string]::IsNullOrWhiteSpace($newText)) {
@@ -614,7 +635,8 @@ $startButton.Add_Click({
     $script:CurrentLogFile = Join-Path $env:TEMP ("MediaScribe-GUI-" + [guid]::NewGuid().ToString() + ".log")
     $script:LastLogLength = 0
 
-    New-Item -ItemType File -Path $script:CurrentLogFile -Force | Out-Null
+    $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+    [System.IO.File]::WriteAllText($script:CurrentLogFile, "", $utf8NoBom)
 
     $arguments = @(
         "-NoProfile",
@@ -635,6 +657,17 @@ $startButton.Add_Click({
     $psi.RedirectStandardError = $true
     $psi.CreateNoWindow = $true
 
+    try {
+        $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+        $psi.StandardOutputEncoding = $utf8NoBom
+        $psi.StandardErrorEncoding = $utf8NoBom
+
+        $psi.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8"
+        $psi.EnvironmentVariables["PYTHONUTF8"] = "1"
+    } catch {
+        # Older hosts may not support every encoding property. Continue with defaults.
+    }
+
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $psi
 
@@ -647,9 +680,11 @@ $startButton.Add_Click({
         $outputReader = {
             param($proc, $logPath)
 
+            $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+
             while (-not $proc.StandardOutput.EndOfStream) {
                 $line = $proc.StandardOutput.ReadLine()
-                Add-Content -LiteralPath $logPath -Value $line
+                [System.IO.File]::AppendAllText($logPath, ($line + [Environment]::NewLine), $utf8NoBom)
             }
         }
 
