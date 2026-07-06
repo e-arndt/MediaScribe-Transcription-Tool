@@ -106,6 +106,35 @@ $RecognizedExtensions = @(
     ".mp3", ".m4a", ".wav", ".aac", ".flac", ".ogg", ".opus", ".wma"
 )
 
+$LanguageOptions = [ordered]@{
+    "English"     = "en"
+    "Auto-detect" = "auto"
+    "Spanish"     = "es"
+    "French"      = "fr"
+    "German"      = "de"
+    "Italian"     = "it"
+    "Portuguese"  = "pt"
+    "Japanese"    = "ja"
+    "Korean"      = "ko"
+    "Chinese"     = "zh"
+}
+
+function Get-LanguageNameFromCode {
+    param([string]$LanguageCode)
+
+    if ([string]::IsNullOrWhiteSpace($LanguageCode)) {
+        return "English"
+    }
+
+    foreach ($entry in $LanguageOptions.GetEnumerator()) {
+        if ($entry.Value -eq $LanguageCode) {
+            return $entry.Key
+        }
+    }
+
+    return "English"
+}
+
 $script:SourceFolder = $InputDir
 
 function Get-MediaFilesFromFolder {
@@ -184,7 +213,7 @@ function Set-RunningState {
     $startButton.Enabled = -not $IsRunning
     $outputModeCombo.Enabled = -not $IsRunning
     $modelCombo.Enabled = -not $IsRunning
-    $languageTextBox.Enabled = -not $IsRunning
+    $languageCombo.Enabled = -not $IsRunning
     $openInputButton.Enabled = -not $IsRunning
     $openOutputButton.Enabled = -not $IsRunning
     $clearStatusButton.Enabled = -not $IsRunning
@@ -352,12 +381,24 @@ $languageLabel.Location = New-Object System.Drawing.Point(625, 30)
 $languageLabel.Size = New-Object System.Drawing.Size(140, 25)
 $settingsGroup.Controls.Add($languageLabel)
 
-$languageTextBox = New-Object System.Windows.Forms.TextBox
-$languageTextBox.Font = $fontMain
-$languageTextBox.Location = New-Object System.Drawing.Point(625, 58)
-$languageTextBox.Size = New-Object System.Drawing.Size(180, 27)
-$languageTextBox.Text = $DefaultLanguage
-$settingsGroup.Controls.Add($languageTextBox)
+$languageCombo = New-Object System.Windows.Forms.ComboBox
+$languageCombo.Font = $fontMain
+$languageCombo.Location = New-Object System.Drawing.Point(625, 58)
+$languageCombo.Size = New-Object System.Drawing.Size(180, 28)
+$languageCombo.DropDownStyle = "DropDownList"
+
+foreach ($languageName in $LanguageOptions.Keys) {
+    [void]$languageCombo.Items.Add($languageName)
+}
+
+$defaultLanguageName = Get-LanguageNameFromCode -LanguageCode $DefaultLanguage
+$languageCombo.SelectedItem = $defaultLanguageName
+
+if ($null -eq $languageCombo.SelectedItem -and $languageCombo.Items.Count -gt 0) {
+    $languageCombo.SelectedIndex = 0
+}
+
+$settingsGroup.Controls.Add($languageCombo)
 
 # -----------------------------
 # Action buttons
@@ -549,10 +590,15 @@ $startButton.Add_Click({
 
     $selectedOutputMode = if ($outputModeCombo.SelectedIndex -eq 1) { "full" } else { "default" }
     $selectedModel = if ($modelCombo.SelectedIndex -eq 1) { "large" } else { $DefaultModel }
-    $selectedLanguage = $languageTextBox.Text.Trim()
 
+    $selectedLanguageName = [string]$languageCombo.SelectedItem
+    if ([string]::IsNullOrWhiteSpace($selectedLanguageName)) {
+        $selectedLanguageName = "English"
+    }
+
+    $selectedLanguage = $LanguageOptions[$selectedLanguageName]
     if ([string]::IsNullOrWhiteSpace($selectedLanguage)) {
-        $selectedLanguage = $DefaultLanguage
+        $selectedLanguage = "en"
     }
 
     $statusBox.Clear()
@@ -560,7 +606,7 @@ $startButton.Add_Click({
     Add-Status "Selected file: $selectedFile"
     Add-Status "Output mode: $selectedOutputMode"
     Add-Status "Whisper model: $selectedModel"
-    Add-Status "Language: $selectedLanguage"
+    Add-Status "Language: $selectedLanguageName"
     Add-Status ""
 
     Set-RunningState -IsRunning $true

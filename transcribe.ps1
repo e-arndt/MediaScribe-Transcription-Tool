@@ -116,26 +116,11 @@ function Resolve-WhisperCommand {
   $pythonCommand = Get-Command "python" -ErrorAction SilentlyContinue
 
   if ($null -ne $pythonCommand) {
-    try {
-      $testProcess = Start-Process `
-        -FilePath $pythonCommand.Source `
-        -ArgumentList "-m", "whisper", "--help" `
-        -NoNewWindow `
-        -Wait `
-        -PassThru `
-        -RedirectStandardOutput "$env:TEMP\mediascribe_whisper_help_out.txt" `
-        -RedirectStandardError "$env:TEMP\mediascribe_whisper_help_err.txt"
-
-      if ($testProcess.ExitCode -eq 0) {
-        return [pscustomobject]@{
-          Found    = $true
-          FilePath = $pythonCommand.Source
-          Mode     = "PythonModule"
-          Source   = "python -m whisper"
-        }
-      }
-    } catch {
-      # Try global whisper command below.
+    return [pscustomobject]@{
+      Found    = $true
+      FilePath = $pythonCommand.Source
+      Mode     = "PythonModule"
+      Source   = "python -m whisper"
     }
   }
 
@@ -174,6 +159,25 @@ function Normalize-OutputMode {
   }
 
   return "default"
+}
+
+function Normalize-WhisperLanguage {
+  param(
+    [string]$LanguageValue,
+    [string]$FallbackLanguage = "en"
+  )
+
+  if ([string]::IsNullOrWhiteSpace($LanguageValue)) {
+    return $FallbackLanguage
+  }
+
+  $normalized = $LanguageValue.Trim().ToLowerInvariant()
+
+  if ($normalized -in @("auto", "auto-detect", "autodetect", "detect")) {
+    return "auto"
+  }
+
+  return $normalized
 }
 
 function Get-ExpectedOutputExtensions {
@@ -268,6 +272,8 @@ if (-not [string]::IsNullOrWhiteSpace($Model)) {
 if (-not [string]::IsNullOrWhiteSpace($Language)) {
   $DefaultLanguage = $Language
 }
+
+$DefaultLanguage = Normalize-WhisperLanguage -LanguageValue $DefaultLanguage -FallbackLanguage "en"
 
 # Allow command-line / future GUI mode to override configured output mode.
 if (-not [string]::IsNullOrWhiteSpace($OutputMode)) {
@@ -535,6 +541,14 @@ function Invoke-TranscriptionFile {
   Write-Info "Output mode: $SelectedOutputMode"
   Write-Info "Whisper model: $WhisperModel"
 
+  $WhisperLanguage = Normalize-WhisperLanguage -LanguageValue $WhisperLanguage -FallbackLanguage "en"
+
+  if ($WhisperLanguage -eq "auto") {
+    Write-Info "Language: Auto-detect"
+  } else {
+    Write-Info "Language: $WhisperLanguage"
+  }
+
   # Create WAV in the job folder.
   $WavPath = Join-Path $JobDir "$BaseName.wav"
 
@@ -579,16 +593,46 @@ function Invoke-TranscriptionFile {
   # This keeps the source path stable while FFmpeg and Whisper are working.
   Write-Section "Transcribing"
   Write-Info "Running Whisper model: $WhisperModel"
-  Write-Info "Live transcript progress appears in 30-second chunks."
-  Write-Info "Progress is displayed below and may take a while."
+
+  if ($WhisperLanguage -eq "auto") {
+    Write-Info "Whisper language: Auto-detect"
+  } else {
+    Write-Info "Whisper language: $WhisperLanguage"
+  }
+
+  # Live preview is enabled only for English.
+  # Other languages and Auto-detect are transcribed quietly so Windows does not crash
+  # while trying to display characters that may not be supported by the status window.
+  $ShowLivePreview = ($WhisperLanguage -eq "en")
+
+  if ($ShowLivePreview) {
+    Write-Info "Live transcript progress appears in 30-second chunks."
+    Write-Info "Progress is displayed below and may take a while."
+  } else {
+    Write-Warn "Live transcript preview is not shown for this language setting."
+    Write-Info "Some characters may not display correctly in the Windows status window."
+    Write-Info "The final transcript file will still be created when transcription finishes."
+  }
+
   Write-Host ""
+
+  # Encourage Python/Whisper to use UTF-8 where possible.
+  $env:PYTHONIOENCODING = "utf-8"
+  $env:PYTHONUTF8 = "1"
+
+  try {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    [Console]::InputEncoding = [System.Text.Encoding]::UTF8
+    $OutputEncoding = [System.Text.Encoding]::UTF8
+  } catch {
+    # Ignore encoding setup errors.
+  }
 
   if ($ResolvedWhisperCommand.Mode -eq "PythonModule") {
     $whisperArgs = @(
       "-m", "whisper",
       "`"$WavPath`"",
       "--model", $WhisperModel,
-      "--language", $WhisperLanguage,
       "--fp16", "False",
       "--output_dir", "`"$JobDir`"",
       "--output_format", $WhisperOutputFormat
@@ -597,15 +641,80 @@ function Invoke-TranscriptionFile {
     $whisperArgs = @(
       "`"$WavPath`"",
       "--model", $WhisperModel,
-      "--language", $WhisperLanguage,
       "--fp16", "False",
       "--output_dir", "`"$JobDir`"",
       "--output_format", $WhisperOutputFormat
     )
   }
 
-  $whisperProcess = Start-Process -FilePath $ResolvedWhisperCommand.FilePath -ArgumentList $whisperArgs -NoNewWindow -Wait -PassThru
-  $whisperExit = $whisperProcess.ExitCode
+  if ($WhisperLanguage -ne "auto") {
+    $whisperArgs += @("--language", $WhisperLanguage)
+  }
+
+  if (-not $ShowLivePreview) {
+    $whisperArgs += @("--verbose", "False")
+  }
+
+  $whisperStdOutLog = Join-Path $JobDir "whisper_stdout.log"
+  $whisperStdErrLog = Join-Path $JobDir "whisper_stderr.log"
+
+  $previousTqdmDisable = $env:TQDM_DISABLE
+
+  try {
+    Write-Info "Whisper command source: $($ResolvedWhisperCommand.Source)"
+    Write-Info "Whisper executable: $($ResolvedWhisperCommand.FilePath)"
+
+    if ($ShowLivePreview) {
+      $whisperProcess = Start-Process `
+        -FilePath $ResolvedWhisperCommand.FilePath `
+        -ArgumentList $whisperArgs `
+        -NoNewWindow `
+        -Wait `
+        -PassThru `
+        -ErrorAction Stop
+    } else {
+      Write-Info "Whisper progress output is hidden for this language setting."
+      Write-Info "Whisper log files will be saved in the job folder if needed."
+
+      $env:TQDM_DISABLE = "1"
+
+      $whisperProcess = Start-Process `
+        -FilePath $ResolvedWhisperCommand.FilePath `
+        -ArgumentList $whisperArgs `
+        -NoNewWindow `
+        -Wait `
+        -PassThru `
+        -RedirectStandardOutput $whisperStdOutLog `
+        -RedirectStandardError $whisperStdErrLog `
+        -ErrorAction Stop
+    }
+
+    if ($null -eq $previousTqdmDisable) {
+      Remove-Item Env:\TQDM_DISABLE -ErrorAction SilentlyContinue
+    } else {
+      $env:TQDM_DISABLE = $previousTqdmDisable
+    }
+
+    $whisperExit = $whisperProcess.ExitCode
+  } catch {
+    if ($null -eq $previousTqdmDisable) {
+      Remove-Item Env:\TQDM_DISABLE -ErrorAction SilentlyContinue
+    } else {
+      $env:TQDM_DISABLE = $previousTqdmDisable
+    }
+    Write-ErrorMessage "Whisper could not be started."
+    Write-ErrorMessage $_.Exception.Message
+    Write-Warn "Audio extraction succeeded, so the WAV file may still be usable:"
+    Write-Host "  $WavPath"
+
+    return [pscustomobject]@{
+      FileName = $SelectedInputFile.Name
+      JobDir   = $JobDir
+      ExitCode = 1
+      Success  = $false
+      Message  = "Whisper could not be started: $($_.Exception.Message)"
+    }
+  }
 
   $expectedExtensions = Get-ExpectedOutputExtensions -SelectedOutputMode $SelectedOutputMode
   $missingOutputs = @()
@@ -618,12 +727,14 @@ function Invoke-TranscriptionFile {
     }
   }
 
-  if ($whisperExit -eq 0 -and $missingOutputs.Count -gt 0) {
+  $outputsCreated = ($missingOutputs.Count -eq 0)
+
+  if ($whisperExit -eq 0 -and -not $outputsCreated) {
     Write-Warn "Whisper finished, but expected output files were not found: $($missingOutputs -join ', ')."
   }
 
-  # Archive original input file after transcription completes.
-  if ($whisperExit -eq 0) {
+  # Archive original input file only after transcription really completes.
+  if ($whisperExit -eq 0 -and $outputsCreated) {
     $archivedOriginal = Get-UniqueDestinationPath -FolderPath $JobDir -FileName $SelectedInputFile.Name
 
     if ($InputFileIsInsideInputFolder -and $MoveInputFolderFilesAfterProcessing) {
@@ -644,13 +755,13 @@ function Invoke-TranscriptionFile {
 
   Write-Host ""
 
-  if ($whisperExit -eq 0) {
+  if ($whisperExit -eq 0 -and $outputsCreated) {
     Write-Section "Complete"
     Write-Ok "Done. Files saved in:"
     Write-Host "  $JobDir"
   } else {
     Write-Section "Complete"
-    Write-Warn "Whisper exited with code $whisperExit"
+    Write-Warn "Whisper did not create the expected transcript output."
     Write-Host "Check output folder:"
     Write-Host "  $JobDir"
   }
@@ -662,7 +773,7 @@ function Invoke-TranscriptionFile {
   return [pscustomobject]@{
     FileName = $SelectedInputFile.Name
     JobDir   = $JobDir
-    ExitCode = $whisperExit
+    ExitCode = if ($whisperExit -eq 0 -and $missingOutputs.Count -gt 0) { 1 } else { $whisperExit }
     Success  = ($whisperExit -eq 0 -and $missingOutputs.Count -eq 0)
     Message  = if ($missingOutputs.Count -gt 0) {
       "Missing expected output files: $($missingOutputs -join ', ')"
@@ -797,6 +908,12 @@ if ($ParameterMode) {
     Write-Info "Files selected: $($selectedFiles.Count)"
     Write-Info "Output mode: $SelectedOutputMode"
     Write-Info "Whisper model: $WhisperModel"
+
+    if ($WhisperLanguage -eq "auto") {
+      Write-Info "Language: Auto-detect"
+    } else {
+      Write-Info "Language: $WhisperLanguage"
+    }
   }
 
   $results = @()
