@@ -129,14 +129,19 @@ $RecognizedExtensions = @(
 $LanguageOptions = [ordered]@{
     "English"     = "en"
     "Auto-detect" = "auto"
-    "Spanish"     = "es"
+    "Chinese"     = "zh"
     "French"      = "fr"
     "German"      = "de"
     "Italian"     = "it"
-    "Portuguese"  = "pt"
     "Japanese"    = "ja"
     "Korean"      = "ko"
-    "Chinese"     = "zh"
+    "Portuguese"  = "pt"
+    "Spanish"     = "es"
+}
+
+$OutputTextOptions = [ordered]@{
+    "Same as input / detected" = "same"
+    "English translation"      = "english"
 }
 
 function Get-LanguageNameFromCode {
@@ -234,6 +239,7 @@ function Set-RunningState {
     $outputModeCombo.Enabled = -not $IsRunning
     $modelCombo.Enabled = -not $IsRunning
     $languageCombo.Enabled = -not $IsRunning
+    $outputTextCombo.Enabled = -not $IsRunning
     $openInputButton.Enabled = -not $IsRunning
     $openOutputButton.Enabled = -not $IsRunning
     $clearStatusButton.Enabled = -not $IsRunning
@@ -370,7 +376,7 @@ $settingsGroup.Controls.Add($outputModeLabel)
 $outputModeCombo = New-Object System.Windows.Forms.ComboBox
 $outputModeCombo.Font = $fontMain
 $outputModeCombo.Location = New-Object System.Drawing.Point(15, 58)
-$outputModeCombo.Size = New-Object System.Drawing.Size(280, 28)
+$outputModeCombo.Size = New-Object System.Drawing.Size(220, 28)
 $outputModeCombo.DropDownStyle = "DropDownList"
 [void]$outputModeCombo.Items.Add("Default - TXT only")
 [void]$outputModeCombo.Items.Add("Full - TXT, SRT, VTT, TSV, JSON")
@@ -380,31 +386,31 @@ $settingsGroup.Controls.Add($outputModeCombo)
 $modelLabel = New-Object System.Windows.Forms.Label
 $modelLabel.Text = "Transcription mode:"
 $modelLabel.Font = $fontSection
-$modelLabel.Location = New-Object System.Drawing.Point(325, 30)
-$modelLabel.Size = New-Object System.Drawing.Size(210, 25)
+$modelLabel.Location = New-Object System.Drawing.Point(250, 30)
+$modelLabel.Size = New-Object System.Drawing.Size(230, 25)
 $settingsGroup.Controls.Add($modelLabel)
 
 $modelCombo = New-Object System.Windows.Forms.ComboBox
 $modelCombo.Font = $fontMain
-$modelCombo.Location = New-Object System.Drawing.Point(325, 58)
-$modelCombo.Size = New-Object System.Drawing.Size(270, 28)
+$modelCombo.Location = New-Object System.Drawing.Point(250, 58)
+$modelCombo.Size = New-Object System.Drawing.Size(225, 28)
 $modelCombo.DropDownStyle = "DropDownList"
-[void]$modelCombo.Items.Add("Fast - $DefaultModel")
-[void]$modelCombo.Items.Add("Accurate - large")
+[void]$modelCombo.Items.Add("Fast - recommended")
+[void]$modelCombo.Items.Add("Accurate - slower, for difficult audio")
 $modelCombo.SelectedIndex = 0
 $settingsGroup.Controls.Add($modelCombo)
 
 $languageLabel = New-Object System.Windows.Forms.Label
-$languageLabel.Text = "Language:"
+$languageLabel.Text = "Input Audio:"
 $languageLabel.Font = $fontSection
-$languageLabel.Location = New-Object System.Drawing.Point(625, 30)
-$languageLabel.Size = New-Object System.Drawing.Size(140, 25)
+$languageLabel.Location = New-Object System.Drawing.Point(495, 30)
+$languageLabel.Size = New-Object System.Drawing.Size(130, 25)
 $settingsGroup.Controls.Add($languageLabel)
 
 $languageCombo = New-Object System.Windows.Forms.ComboBox
 $languageCombo.Font = $fontMain
-$languageCombo.Location = New-Object System.Drawing.Point(625, 58)
-$languageCombo.Size = New-Object System.Drawing.Size(180, 28)
+$languageCombo.Location = New-Object System.Drawing.Point(495, 58)
+$languageCombo.Size = New-Object System.Drawing.Size(125, 28)
 $languageCombo.DropDownStyle = "DropDownList"
 
 foreach ($languageName in $LanguageOptions.Keys) {
@@ -419,6 +425,26 @@ if ($null -eq $languageCombo.SelectedItem -and $languageCombo.Items.Count -gt 0)
 }
 
 $settingsGroup.Controls.Add($languageCombo)
+
+$outputTextLabel = New-Object System.Windows.Forms.Label
+$outputTextLabel.Text = "Output Text:"
+$outputTextLabel.Font = $fontSection
+$outputTextLabel.Location = New-Object System.Drawing.Point(640, 30)
+$outputTextLabel.Size = New-Object System.Drawing.Size(150, 25)
+$settingsGroup.Controls.Add($outputTextLabel)
+
+$outputTextCombo = New-Object System.Windows.Forms.ComboBox
+$outputTextCombo.Font = $fontMain
+$outputTextCombo.Location = New-Object System.Drawing.Point(640, 58)
+$outputTextCombo.Size = New-Object System.Drawing.Size(170, 28)
+$outputTextCombo.DropDownStyle = "DropDownList"
+
+foreach ($outputTextName in $OutputTextOptions.Keys) {
+    [void]$outputTextCombo.Items.Add($outputTextName)
+}
+
+$outputTextCombo.SelectedIndex = 0
+$settingsGroup.Controls.Add($outputTextCombo)
 
 # -----------------------------
 # Action buttons
@@ -622,12 +648,30 @@ $startButton.Add_Click({
         $selectedLanguage = "en"
     }
 
+    $selectedOutputTextName = [string]$outputTextCombo.SelectedItem
+    if ([string]::IsNullOrWhiteSpace($selectedOutputTextName)) {
+        $selectedOutputTextName = "Same as input / detected"
+    }
+
+    $selectedOutputText = $OutputTextOptions[$selectedOutputTextName]
+    if ([string]::IsNullOrWhiteSpace($selectedOutputText)) {
+        $selectedOutputText = "same"
+    }
+
+    # Whisper translates to English only. English input + English output is handled as normal transcription.
+    $selectedTask = "transcribe"
+    if ($selectedOutputText -eq "english" -and $selectedLanguage -ne "en") {
+        $selectedTask = "translate"
+    }
+
     $statusBox.Clear()
     Add-Status "MediaScribe GUI started."
     Add-Status "Selected file: $selectedFile"
     Add-Status "Output mode: $selectedOutputMode"
     Add-Status "Whisper model: $selectedModel"
-    Add-Status "Language: $selectedLanguageName"
+    Add-Status "Input audio: $selectedLanguageName"
+    Add-Status "Output text: $selectedOutputTextName"
+    Add-Status "Whisper task: $selectedTask"
     Add-Status ""
 
     Set-RunningState -IsRunning $true
@@ -645,7 +689,8 @@ $startButton.Add_Click({
         "-InputFile", "`"$selectedFile`"",
         "-OutputMode", $selectedOutputMode,
         "-Model", $selectedModel,
-        "-Language", $selectedLanguage
+        "-Language", $selectedLanguage,
+        "-Task", $selectedTask
     ) -join " "
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -691,9 +736,11 @@ $startButton.Add_Click({
         $errorReader = {
             param($proc, $logPath)
 
+            $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+
             while (-not $proc.StandardError.EndOfStream) {
                 $line = $proc.StandardError.ReadLine()
-                Add-Content -LiteralPath $logPath -Value $line
+                [System.IO.File]::AppendAllText($logPath, ($line + [Environment]::NewLine), $utf8NoBom)
             }
         }
 

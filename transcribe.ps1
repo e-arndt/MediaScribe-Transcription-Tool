@@ -10,7 +10,10 @@ param(
     [string]$Language,
 
     [ValidateSet("default", "full")]
-    [string]$OutputMode
+    [string]$OutputMode,
+
+    [ValidateSet("transcribe", "translate")]
+    [string]$Task
 )
 
 function New-DefaultConfig {
@@ -180,6 +183,24 @@ function Normalize-WhisperLanguage {
   return $normalized
 }
 
+function Normalize-WhisperTask {
+  param(
+    [string]$TaskValue
+  )
+
+  if ([string]::IsNullOrWhiteSpace($TaskValue)) {
+    return "transcribe"
+  }
+
+  $normalized = $TaskValue.Trim().ToLowerInvariant()
+
+  if ($normalized -eq "translate") {
+    return "translate"
+  }
+
+  return "transcribe"
+}
+
 function Get-ExpectedOutputExtensions {
   param(
     [string]$SelectedOutputMode
@@ -281,6 +302,7 @@ if (-not [string]::IsNullOrWhiteSpace($OutputMode)) {
 }
 
 $NormalizedOutputMode = Normalize-OutputMode -Mode $DefaultOutputMode
+$WhisperTask = Normalize-WhisperTask -TaskValue $Task
 
 $ParameterMode = -not [string]::IsNullOrWhiteSpace($InputFile)
 
@@ -512,6 +534,7 @@ function Invoke-TranscriptionFile {
     [string]$SelectedOutputMode,
     [string]$WhisperModel,
     [string]$WhisperLanguage,
+    [string]$WhisperTask = "transcribe",
     [bool]$OpenFolderWhenDone = $false
   )
 
@@ -542,11 +565,18 @@ function Invoke-TranscriptionFile {
   Write-Info "Whisper model: $WhisperModel"
 
   $WhisperLanguage = Normalize-WhisperLanguage -LanguageValue $WhisperLanguage -FallbackLanguage "en"
+  $WhisperTask = Normalize-WhisperTask -TaskValue $WhisperTask
 
   if ($WhisperLanguage -eq "auto") {
     Write-Info "Language: Auto-detect"
   } else {
     Write-Info "Language: $WhisperLanguage"
+  }
+
+  if ($WhisperTask -eq "translate") {
+    Write-Info "Output text: English translation"
+  } else {
+    Write-Info "Output text: Same as input / detected"
   }
 
   # Create WAV in the job folder.
@@ -600,18 +630,24 @@ function Invoke-TranscriptionFile {
     Write-Info "Whisper language: $WhisperLanguage"
   }
 
-  # Live preview is enabled only for English.
-  # Other languages and Auto-detect are transcribed quietly so Windows does not crash
+  if ($WhisperTask -eq "translate") {
+    Write-Info "Whisper task: Translate to English"
+  } else {
+    Write-Info "Whisper task: Transcribe"
+  }
+
+  # Live preview is enabled only for English transcription.
+  # Auto-detect, non-English input, and English translation are run quietly so Windows does not crash
   # while trying to display characters that may not be supported by the status window.
-  $ShowLivePreview = ($WhisperLanguage -eq "en")
+  $ShowLivePreview = ($WhisperLanguage -eq "en" -and $WhisperTask -eq "transcribe")
 
   if ($ShowLivePreview) {
     Write-Info "Live transcript progress appears in 30-second chunks."
     Write-Info "Progress is displayed below and may take a while."
   } else {
-    Write-Warn "Live transcript preview is not shown for this language setting."
+    Write-Warn "Live transcript preview is not shown for this language/output setting."
     Write-Info "Some characters may not display correctly in the Windows status window."
-    Write-Info "The final transcript file will still be created when transcription finishes."
+    Write-Info "English translation and non-English transcription still create the final transcript file."
   }
 
   Write-Host ""
@@ -634,6 +670,7 @@ function Invoke-TranscriptionFile {
       "`"$WavPath`"",
       "--model", $WhisperModel,
       "--fp16", "False",
+      "--task", $WhisperTask,
       "--output_dir", "`"$JobDir`"",
       "--output_format", $WhisperOutputFormat
     )
@@ -642,6 +679,7 @@ function Invoke-TranscriptionFile {
       "`"$WavPath`"",
       "--model", $WhisperModel,
       "--fp16", "False",
+      "--task", $WhisperTask,
       "--output_dir", "`"$JobDir`"",
       "--output_format", $WhisperOutputFormat
     )
@@ -702,6 +740,7 @@ function Invoke-TranscriptionFile {
     } else {
       $env:TQDM_DISABLE = $previousTqdmDisable
     }
+
     Write-ErrorMessage "Whisper could not be started."
     Write-ErrorMessage $_.Exception.Message
     Write-Warn "Audio extraction succeeded, so the WAV file may still be usable:"
@@ -799,6 +838,7 @@ if ($ParameterMode) {
     -SelectedOutputMode $SelectedOutputMode `
     -WhisperModel $DefaultModel `
     -WhisperLanguage $DefaultLanguage `
+    -WhisperTask $WhisperTask `
     -OpenFolderWhenDone:$false
 
   exit $result.ExitCode
@@ -914,6 +954,12 @@ if ($ParameterMode) {
     } else {
       Write-Info "Language: $WhisperLanguage"
     }
+
+    if ($WhisperTask -eq "translate") {
+      Write-Info "Output text: English translation"
+    } else {
+      Write-Info "Output text: Same as input / detected"
+    }
   }
 
   $results = @()
@@ -931,6 +977,7 @@ if ($ParameterMode) {
       -SelectedOutputMode $SelectedOutputMode `
       -WhisperModel $WhisperModel `
       -WhisperLanguage $WhisperLanguage `
+      -WhisperTask $WhisperTask `
       -OpenFolderWhenDone:$false
 
     $results += $result
