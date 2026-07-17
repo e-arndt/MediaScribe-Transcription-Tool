@@ -174,7 +174,7 @@ function Get-MediaFilesFromFolder {
         Sort-Object Name
 }
 
-function Refresh-FileList {
+function Update-FileList {
     param([string]$FolderPath)
 
     if ([string]::IsNullOrWhiteSpace($FolderPath) -or -not (Test-Path -LiteralPath $FolderPath -PathType Container)) {
@@ -584,13 +584,13 @@ $browseFolderButton.Add_Click({
     $dialog.ShowNewFolderButton = $false
 
     if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        Refresh-FileList -FolderPath $dialog.SelectedPath
+        Update-FileList -FolderPath $dialog.SelectedPath
         Add-Status "Source folder changed: $($dialog.SelectedPath)"
     }
 })
 
 $refreshFilesButton.Add_Click({
-    Refresh-FileList -FolderPath $script:SourceFolder
+    Update-FileList -FolderPath $script:SourceFolder
     Add-Status "File list refreshed."
 })
 
@@ -786,6 +786,6 @@ Add-Status "MediaScribe GUI ready."
 Add-Status "Input folder: $InputDir"
 Add-Status "Output folder: $OutputDir"
 
-Refresh-FileList -FolderPath $script:SourceFolder
+Update-FileList -FolderPath $script:SourceFolder
 
 [void]$form.ShowDialog()

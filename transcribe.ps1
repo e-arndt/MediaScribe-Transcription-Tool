@@ -146,7 +146,7 @@ function Resolve-WhisperCommand {
   }
 }
 
-function Normalize-OutputMode {
+function Resolve-OutputMode {
   param(
     [string]$Mode
   )
@@ -164,7 +164,7 @@ function Normalize-OutputMode {
   return "default"
 }
 
-function Normalize-WhisperLanguage {
+function Resolve-WhisperLanguage {
   param(
     [string]$LanguageValue,
     [string]$FallbackLanguage = "en"
@@ -183,7 +183,7 @@ function Normalize-WhisperLanguage {
   return $normalized
 }
 
-function Normalize-WhisperTask {
+function Resolve-WhisperTask {
   param(
     [string]$TaskValue
   )
@@ -294,15 +294,15 @@ if (-not [string]::IsNullOrWhiteSpace($Language)) {
   $DefaultLanguage = $Language
 }
 
-$DefaultLanguage = Normalize-WhisperLanguage -LanguageValue $DefaultLanguage -FallbackLanguage "en"
+$DefaultLanguage = Resolve-WhisperLanguage -LanguageValue $DefaultLanguage -FallbackLanguage "en"
 
 # Allow command-line / future GUI mode to override configured output mode.
 if (-not [string]::IsNullOrWhiteSpace($OutputMode)) {
     $DefaultOutputMode = $OutputMode.ToLowerInvariant()
 }
 
-$NormalizedOutputMode = Normalize-OutputMode -Mode $DefaultOutputMode
-$WhisperTask = Normalize-WhisperTask -TaskValue $Task
+$NormalizedOutputMode = Resolve-OutputMode -Mode $DefaultOutputMode
+$WhisperTask = Resolve-WhisperTask -TaskValue $Task
 
 $ParameterMode = -not [string]::IsNullOrWhiteSpace($InputFile)
 
@@ -350,7 +350,7 @@ if (-not $ResolvedWhisperCommand.Found) {
 
 # Start the interactive app with a clean screen after dependency checks pass.
 if (-not $ParameterMode) {
-  cls
+  Clear-Host
 }
 
 function Write-Section {
@@ -475,7 +475,7 @@ if (-not $ParameterMode) {
   Write-Host ""
 
   Read-Host "Press Enter to start" | Out-Null
-  cls
+  Clear-Host
 }
 
 function Select-OutputMode {
@@ -564,8 +564,8 @@ function Invoke-TranscriptionFile {
   Write-Info "Output mode: $SelectedOutputMode"
   Write-Info "Whisper model: $WhisperModel"
 
-  $WhisperLanguage = Normalize-WhisperLanguage -LanguageValue $WhisperLanguage -FallbackLanguage "en"
-  $WhisperTask = Normalize-WhisperTask -TaskValue $WhisperTask
+  $WhisperLanguage = Resolve-WhisperLanguage -LanguageValue $WhisperLanguage -FallbackLanguage "en"
+  $WhisperTask = Resolve-WhisperTask -TaskValue $WhisperTask
 
   if ($WhisperLanguage -eq "auto") {
     Write-Info "Language: Auto-detect"
@@ -941,7 +941,7 @@ if ($ParameterMode) {
   $WhisperModel = Select-WhisperModel -DefaultModel $DefaultModel
   $WhisperLanguage = $DefaultLanguage
 
-  cls
+  Clear-Host
 
   if ($batchMode) {
     Write-Section "Batch Settings"
