@@ -65,10 +65,31 @@ $fontStatus = New-Object System.Drawing.Font("Consolas", 10)
 # GUI colors
 # -----------------------------
 
-$colorFormBackground = [System.Drawing.Color]::FromArgb(218, 229, 231)
-$colorPanelBackground = [System.Drawing.Color]::FromArgb(245, 248, 248)
-$colorGroupText = [System.Drawing.Color]::FromArgb(0, 80, 95)
+# Main window: warm, low-glare neutral
+$colorFormBackground = [System.Drawing.Color]::FromArgb(171, 147, 120)
+
+# Group boxes: lighter complementary surface
+$colorPanelBackground = [System.Drawing.Color]::FromArgb(209, 190, 167)
+
+# Text boxes, dropdowns, and status area
+$colorInputBackground = [System.Drawing.Color]::FromArgb(250, 249, 246)
+
+# Text colors
+$colorPrimaryText = [System.Drawing.Color]::FromArgb(51, 6, 8)
+$colorSecondaryText = [System.Drawing.Color]::FromArgb(8, 4, 4)
+$colorGroupText = [System.Drawing.Color]::FromArgb(179, 30, 37)
+
+# Neutral buttons
+$colorButtonBackground = [System.Drawing.Color]::FromArgb(237, 221, 199)
+$colorButtonHover = [System.Drawing.Color]::FromArgb(199, 152, 78)
+$colorButtonDown = [System.Drawing.Color]::FromArgb(187, 202, 199)
+$colorButtonText = [System.Drawing.Color]::FromArgb(25, 38, 40)
+$colorButtonBorder = [System.Drawing.Color]::FromArgb(90, 110, 112)
+
+# Primary Start button
 $colorStartGreen = [System.Drawing.Color]::FromArgb(0, 128, 64)
+$colorStartGreenHover = [System.Drawing.Color]::FromArgb(0, 112, 57)
+$colorStartGreenDown = [System.Drawing.Color]::FromArgb(0, 95, 49)
 
 # -----------------------------
 # Paths and config
@@ -257,7 +278,7 @@ function Set-RunningState {
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "MediaScribe"
-$form.Size = New-Object System.Drawing.Size(880, 800)
+$form.Size = New-Object System.Drawing.Size(880, 930)
 $form.StartPosition = "CenterScreen"
 $form.MinimumSize = New-Object System.Drawing.Size(860, 775)
 $form.WindowState = "Normal"
@@ -294,8 +315,8 @@ $form.Controls.Add($filesGroup)
 $settingsGroup = New-Object System.Windows.Forms.GroupBox
 $settingsGroup.Text = "Transcription Settings"
 $settingsGroup.Font = $fontSection
-$settingsGroup.Location = New-Object System.Drawing.Point(20, 265)
-$settingsGroup.Size = New-Object System.Drawing.Size(825, 115)
+$settingsGroup.Location = New-Object System.Drawing.Point(20, 275)
+$settingsGroup.Size = New-Object System.Drawing.Size(825, 165)
 $settingsGroup.BackColor = $colorPanelBackground
 $settingsGroup.ForeColor = $colorGroupText
 $form.Controls.Add($settingsGroup)
@@ -303,8 +324,8 @@ $form.Controls.Add($settingsGroup)
 $statusGroup = New-Object System.Windows.Forms.GroupBox
 $statusGroup.Text = "Status"
 $statusGroup.Font = $fontSection
-$statusGroup.Location = New-Object System.Drawing.Point(20, 455)
-$statusGroup.Size = New-Object System.Drawing.Size(825, 250)
+$statusGroup.Location = New-Object System.Drawing.Point(20, 525)
+$statusGroup.Size = New-Object System.Drawing.Size(825, 310)
 $statusGroup.BackColor = $colorPanelBackground
 $statusGroup.ForeColor = $colorGroupText
 $form.Controls.Add($statusGroup)
@@ -369,31 +390,31 @@ $filesGroup.Controls.Add($openInputButton)
 $outputModeLabel = New-Object System.Windows.Forms.Label
 $outputModeLabel.Text = "Output mode:"
 $outputModeLabel.Font = $fontSection
-$outputModeLabel.Location = New-Object System.Drawing.Point(15, 30)
+$outputModeLabel.Location = New-Object System.Drawing.Point(70, 30)
 $outputModeLabel.Size = New-Object System.Drawing.Size(160, 25)
 $settingsGroup.Controls.Add($outputModeLabel)
 
 $outputModeCombo = New-Object System.Windows.Forms.ComboBox
 $outputModeCombo.Font = $fontMain
-$outputModeCombo.Location = New-Object System.Drawing.Point(15, 58)
-$outputModeCombo.Size = New-Object System.Drawing.Size(220, 28)
+$outputModeCombo.Location = New-Object System.Drawing.Point(70, 58)
+$outputModeCombo.Size = New-Object System.Drawing.Size(375, 28)
 $outputModeCombo.DropDownStyle = "DropDownList"
-[void]$outputModeCombo.Items.Add("Default - TXT only")
-[void]$outputModeCombo.Items.Add("Full - TXT, SRT, VTT, TSV, JSON")
+[void]$outputModeCombo.Items.Add("Default - Original file, WAV audio, TXT transcript")
+[void]$outputModeCombo.Items.Add("Full - Original file, WAV audio, TXT, SRT, VTT, TSV, JSON")
 $outputModeCombo.SelectedIndex = 0
 $settingsGroup.Controls.Add($outputModeCombo)
 
 $modelLabel = New-Object System.Windows.Forms.Label
 $modelLabel.Text = "Transcription mode:"
 $modelLabel.Font = $fontSection
-$modelLabel.Location = New-Object System.Drawing.Point(250, 30)
+$modelLabel.Location = New-Object System.Drawing.Point(485, 30)
 $modelLabel.Size = New-Object System.Drawing.Size(230, 25)
 $settingsGroup.Controls.Add($modelLabel)
 
 $modelCombo = New-Object System.Windows.Forms.ComboBox
 $modelCombo.Font = $fontMain
-$modelCombo.Location = New-Object System.Drawing.Point(250, 58)
-$modelCombo.Size = New-Object System.Drawing.Size(225, 28)
+$modelCombo.Location = New-Object System.Drawing.Point(485, 58)
+$modelCombo.Size = New-Object System.Drawing.Size(265, 28)
 $modelCombo.DropDownStyle = "DropDownList"
 [void]$modelCombo.Items.Add("Fast - recommended")
 [void]$modelCombo.Items.Add("Accurate - slower, for difficult audio")
@@ -403,13 +424,13 @@ $settingsGroup.Controls.Add($modelCombo)
 $languageLabel = New-Object System.Windows.Forms.Label
 $languageLabel.Text = "Input Audio:"
 $languageLabel.Font = $fontSection
-$languageLabel.Location = New-Object System.Drawing.Point(495, 30)
+$languageLabel.Location = New-Object System.Drawing.Point(70, 100)
 $languageLabel.Size = New-Object System.Drawing.Size(130, 25)
 $settingsGroup.Controls.Add($languageLabel)
 
 $languageCombo = New-Object System.Windows.Forms.ComboBox
 $languageCombo.Font = $fontMain
-$languageCombo.Location = New-Object System.Drawing.Point(495, 58)
+$languageCombo.Location = New-Object System.Drawing.Point(70, 125)
 $languageCombo.Size = New-Object System.Drawing.Size(125, 28)
 $languageCombo.DropDownStyle = "DropDownList"
 
@@ -429,14 +450,14 @@ $settingsGroup.Controls.Add($languageCombo)
 $outputTextLabel = New-Object System.Windows.Forms.Label
 $outputTextLabel.Text = "Output Text:"
 $outputTextLabel.Font = $fontSection
-$outputTextLabel.Location = New-Object System.Drawing.Point(640, 30)
+$outputTextLabel.Location = New-Object System.Drawing.Point(245, 100)
 $outputTextLabel.Size = New-Object System.Drawing.Size(150, 25)
 $settingsGroup.Controls.Add($outputTextLabel)
 
 $outputTextCombo = New-Object System.Windows.Forms.ComboBox
 $outputTextCombo.Font = $fontMain
-$outputTextCombo.Location = New-Object System.Drawing.Point(640, 58)
-$outputTextCombo.Size = New-Object System.Drawing.Size(170, 28)
+$outputTextCombo.Location = New-Object System.Drawing.Point(245, 125)
+$outputTextCombo.Size = New-Object System.Drawing.Size(200, 28)
 $outputTextCombo.DropDownStyle = "DropDownList"
 
 foreach ($outputTextName in $OutputTextOptions.Keys) {
@@ -453,7 +474,7 @@ $settingsGroup.Controls.Add($outputTextCombo)
 $startButton = New-Object System.Windows.Forms.Button
 $startButton.Text = "Start Transcription"
 $startButton.Font = $fontButtonBold
-$startButton.Location = New-Object System.Drawing.Point(60, 390)
+$startButton.Location = New-Object System.Drawing.Point(60, 460)
 $startButton.Size = New-Object System.Drawing.Size(190, 42)
 $startButton.BackColor = $colorStartGreen
 $startButton.ForeColor = [System.Drawing.Color]::White
@@ -463,21 +484,21 @@ $form.Controls.Add($startButton)
 $openOutputButton = New-Object System.Windows.Forms.Button
 $openOutputButton.Text = "Open Output Folder"
 $openOutputButton.Font = $fontButton
-$openOutputButton.Location = New-Object System.Drawing.Point(350, 395)
+$openOutputButton.Location = New-Object System.Drawing.Point(350, 465)
 $openOutputButton.Size = New-Object System.Drawing.Size(175, 34)
 $form.Controls.Add($openOutputButton)
 
 $clearStatusButton = New-Object System.Windows.Forms.Button
 $clearStatusButton.Text = "Clear Status Window"
 $clearStatusButton.Font = $fontButton
-$clearStatusButton.Location = New-Object System.Drawing.Point(650, 395)
+$clearStatusButton.Location = New-Object System.Drawing.Point(650, 465)
 $clearStatusButton.Size = New-Object System.Drawing.Size(150, 34)
 $form.Controls.Add($clearStatusButton)
 
 $closeButton = New-Object System.Windows.Forms.Button
 $closeButton.Text = "Close MediaScribe"
 $closeButton.Font = $fontButton
-$closeButton.Location = New-Object System.Drawing.Point(350, 715)
+$closeButton.Location = New-Object System.Drawing.Point(350, 850)
 $closeButton.Size = New-Object System.Drawing.Size(170, 34)
 $form.Controls.Add($closeButton)
 
@@ -494,12 +515,95 @@ $statusGroup.Controls.Add($statusLabel)
 
 $statusBox = New-Object System.Windows.Forms.TextBox
 $statusBox.Location = New-Object System.Drawing.Point(15, 58)
-$statusBox.Size = New-Object System.Drawing.Size(790, 175)
+$statusBox.Size = New-Object System.Drawing.Size(790, 235)
 $statusBox.Multiline = $true
 $statusBox.ScrollBars = "Vertical"
 $statusBox.ReadOnly = $true
 $statusBox.Font = $fontStatus
 $statusGroup.Controls.Add($statusBox)
+
+
+# -----------------------------
+# Apply GUI theme
+# -----------------------------
+
+# Main form text
+$form.BackColor = $colorFormBackground
+$form.ForeColor = $colorPrimaryText
+
+$titleLabel.ForeColor = $colorPrimaryText
+$subtitleLabel.ForeColor = $colorSecondaryText
+
+# Group box surfaces and titles
+foreach ($group in @(
+    $filesGroup,
+    $settingsGroup,
+    $statusGroup
+)) {
+    $group.BackColor = $colorPanelBackground
+    $group.ForeColor = $colorGroupText
+}
+
+# Normal labels inside the group boxes
+foreach ($label in @(
+    $sourceFolderLabel,
+    $fileLabel,
+    $outputModeLabel,
+    $modelLabel,
+    $languageLabel,
+    $outputTextLabel
+)) {
+    $label.ForeColor = $colorPrimaryText
+}
+
+# Keep the current status emphasized with the accent color
+$statusLabel.ForeColor = $colorGroupText
+
+# Text entry and dropdown controls
+foreach ($control in @(
+    $sourceFolderTextBox,
+    $fileCombo,
+    $outputModeCombo,
+    $modelCombo,
+    $languageCombo,
+    $outputTextCombo,
+    $statusBox
+)) {
+    $control.BackColor = $colorInputBackground
+    $control.ForeColor = $colorPrimaryText
+}
+
+# Neutral buttons
+foreach ($button in @(
+    $browseFolderButton,
+    $refreshFilesButton,
+    $openInputButton,
+    $openOutputButton,
+    $clearStatusButton,
+    $closeButton
+)) {
+    $button.UseVisualStyleBackColor = $false
+    $button.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+    $button.BackColor = $colorButtonBackground
+    $button.ForeColor = $colorButtonText
+
+    $button.FlatAppearance.BorderSize = 1
+    $button.FlatAppearance.BorderColor = $colorButtonBorder
+    $button.FlatAppearance.MouseOverBackColor = $colorButtonHover
+    $button.FlatAppearance.MouseDownBackColor = $colorButtonDown
+}
+
+# Primary action button
+$startButton.UseVisualStyleBackColor = $false
+$startButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$startButton.BackColor = $colorStartGreen
+$startButton.ForeColor = [System.Drawing.Color]::White
+
+$startButton.FlatAppearance.BorderSize = 1
+$startButton.FlatAppearance.BorderColor = $colorStartGreenDown
+$startButton.FlatAppearance.MouseOverBackColor = $colorStartGreenHover
+$startButton.FlatAppearance.MouseDownBackColor = $colorStartGreenDown
+
 
 # -----------------------------
 # Events
