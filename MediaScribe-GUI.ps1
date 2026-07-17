@@ -652,33 +652,41 @@ $logTimer.Add_Tick({
     }
 
     if ($null -ne $script:RunningProcess) {
-        try {
-            if ($script:RunningProcess.HasExited) {
-                $exitCode = $script:RunningProcess.ExitCode
+    try {
+        if ($script:RunningProcess.HasExited) {
+            $exitCode = $script:RunningProcess.ExitCode
 
-                $logTimer.Stop()
-
-                Add-Status ""
-                Add-Status "MediaScribe finished with exit code $exitCode."
-
-                if ($exitCode -eq 0) {
-                    $statusLabel.Text = "Status: Complete"
-                } else {
-                    $statusLabel.Text = "Status: Finished with errors"
-                }
-
-                Set-RunningState -IsRunning $false
-                $script:RunningProcess.Dispose()
-                $script:RunningProcess = $null
-            }
-        } catch {
             $logTimer.Stop()
+
             Add-Status ""
-            Add-Status "MediaScribe process ended, but status could not be read."
+            Add-Status "MediaScribe finished with exit code $exitCode."
+
+            # Re-enable the GUI controls.
             Set-RunningState -IsRunning $false
+
+            # Rescan the source folder so moved or removed files disappear
+            # from the Selected File dropdown.
+            Update-FileList -FolderPath $script:SourceFolder
+
+            # Set the final status after the functions above, because both
+            # can change the status label.
+            if ($exitCode -eq 0) {
+                $statusLabel.Text = "Status: Complete"
+            } else {
+                $statusLabel.Text = "Status: Finished with errors"
+            }
+
+            $script:RunningProcess.Dispose()
             $script:RunningProcess = $null
         }
+    } catch {
+        $logTimer.Stop()
+        Add-Status ""
+        Add-Status "MediaScribe process ended, but status could not be read."
+        Set-RunningState -IsRunning $false
+        $script:RunningProcess = $null
     }
+}
 })
 
 $browseFolderButton.Add_Click({
