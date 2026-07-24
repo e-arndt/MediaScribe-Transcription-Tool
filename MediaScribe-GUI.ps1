@@ -6,6 +6,101 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+# Allow only one MediaScribe GUI instance in the current Windows logon session.
+$script:SingleInstanceMutex = $null
+$script:OwnsSingleInstanceMutex = $false
+$singleInstanceMutexName = "Local\MediaScribe.GUI.SingleInstance"
+$singleInstanceCreatedNew = $false
+
+try {
+    $script:SingleInstanceMutex = [System.Threading.Mutex]::new(
+        $true,
+        $singleInstanceMutexName,
+        [ref]$singleInstanceCreatedNew
+    )
+
+    $script:OwnsSingleInstanceMutex = $singleInstanceCreatedNew
+} catch {
+    # If Windows cannot create the mutex, continue rather than blocking MediaScribe.
+    $script:SingleInstanceMutex = $null
+    $script:OwnsSingleInstanceMutex = $false
+    $singleInstanceCreatedNew = $true
+}
+
+if (-not $singleInstanceCreatedNew) {
+    $duplicateInstanceOwner = $null
+
+    try {
+        # Give the warning a temporary TopMost owner so it cannot be hidden
+        # behind the support terminal opened by the duplicate launch.
+        $duplicateInstanceOwner = New-Object System.Windows.Forms.Form
+        $duplicateInstanceOwner.Text = "MediaScribe"
+        $duplicateInstanceOwner.ShowInTaskbar = $false
+        $duplicateInstanceOwner.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
+        $duplicateInstanceOwner.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
+        $duplicateInstanceOwner.Size = New-Object System.Drawing.Size(1, 1)
+        $duplicateInstanceOwner.Opacity = 0.01
+        $duplicateInstanceOwner.TopMost = $true
+
+        $duplicateInstanceOwner.Show()
+        $duplicateInstanceOwner.Activate()
+        $duplicateInstanceOwner.BringToFront()
+        [System.Windows.Forms.Application]::DoEvents()
+
+        [System.Windows.Forms.MessageBox]::Show(
+            $duplicateInstanceOwner,
+            "MediaScribe is already running.`r`n`r`nCheck the taskbar for the open MediaScribe window.`r`nOnly one MediaScribe GUI instance can run at a time.",
+            "MediaScribe Already Running",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Information
+        ) | Out-Null
+    } finally {
+        if ($null -ne $duplicateInstanceOwner) {
+            try {
+                $duplicateInstanceOwner.Close()
+            } catch {
+                # Ignore temporary owner shutdown errors.
+            }
+
+            try {
+                $duplicateInstanceOwner.Dispose()
+            } catch {
+                # Ignore temporary owner disposal errors.
+            }
+        }
+
+        if ($null -ne $script:SingleInstanceMutex) {
+            $script:SingleInstanceMutex.Dispose()
+            $script:SingleInstanceMutex = $null
+        }
+    }
+
+    return
+}
+
+function Release-MediaScribeSingleInstanceMutex {
+    if ($null -eq $script:SingleInstanceMutex) {
+        return
+    }
+
+    if ($script:OwnsSingleInstanceMutex) {
+        try {
+            $script:SingleInstanceMutex.ReleaseMutex()
+        } catch {
+            # The mutex may already have been released during shutdown.
+        }
+    }
+
+    try {
+        $script:SingleInstanceMutex.Dispose()
+    } catch {
+        # Ignore mutex disposal errors during shutdown.
+    }
+
+    $script:SingleInstanceMutex = $null
+    $script:OwnsSingleInstanceMutex = $false
+}
+
 function Initialize-MediaScribeGuiUtf8Output {
     try {
         $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
@@ -22,6 +117,7 @@ function Initialize-MediaScribeGuiUtf8Output {
     # Child PowerShell / Python / Whisper processes inherit these.
     $env:PYTHONIOENCODING = "utf-8"
     $env:PYTHONUTF8 = "1"
+    $env:PYTHONUNBUFFERED = "1"
 }
 
 Initialize-MediaScribeGuiUtf8Output
@@ -386,6 +482,12 @@ $statusGroup.Text = "Status"
 $statusGroup.Font = $fontSection
 $statusGroup.Location = New-Object System.Drawing.Point(20, 525)
 $statusGroup.Size = New-Object System.Drawing.Size(825, 310)
+$statusGroup.Anchor = (
+    [System.Windows.Forms.AnchorStyles]::Top `
+    -bor [System.Windows.Forms.AnchorStyles]::Bottom `
+    -bor [System.Windows.Forms.AnchorStyles]::Left `
+    -bor [System.Windows.Forms.AnchorStyles]::Right
+)
 $statusGroup.BackColor = $colorPanelBackground
 $statusGroup.ForeColor = $colorGroupText
 $form.Controls.Add($statusGroup)
@@ -583,6 +685,7 @@ $closeButton.Text = "Close MediaScribe"
 $closeButton.Font = $fontButton
 $closeButton.Location = New-Object System.Drawing.Point(350, 850)
 $closeButton.Size = New-Object System.Drawing.Size(170, 34)
+$closeButton.Anchor = [System.Windows.Forms.AnchorStyles]::Bottom
 $form.Controls.Add($closeButton)
 
 # -----------------------------
@@ -594,11 +697,22 @@ $statusLabel.Text = "Status: Ready"
 $statusLabel.Font = $fontSection
 $statusLabel.Location = New-Object System.Drawing.Point(15, 28)
 $statusLabel.Size = New-Object System.Drawing.Size(790, 25)
+$statusLabel.Anchor = (
+    [System.Windows.Forms.AnchorStyles]::Top `
+    -bor [System.Windows.Forms.AnchorStyles]::Left `
+    -bor [System.Windows.Forms.AnchorStyles]::Right
+)
 $statusGroup.Controls.Add($statusLabel)
 
 $statusBox = New-Object System.Windows.Forms.TextBox
 $statusBox.Location = New-Object System.Drawing.Point(15, 58)
 $statusBox.Size = New-Object System.Drawing.Size(790, 235)
+$statusBox.Anchor = (
+    [System.Windows.Forms.AnchorStyles]::Top `
+    -bor [System.Windows.Forms.AnchorStyles]::Bottom `
+    -bor [System.Windows.Forms.AnchorStyles]::Left `
+    -bor [System.Windows.Forms.AnchorStyles]::Right
+)
 $statusBox.Multiline = $true
 $statusBox.ScrollBars = "Vertical"
 $statusBox.ReadOnly = $true
@@ -704,6 +818,11 @@ $stopButton.ForeColor = $colorButtonText
 $stopButton.FlatAppearance.BorderSize = 1
 $stopButton.FlatAppearance.BorderColor = $colorButtonBorder
 
+
+# Keep the bottom Close button centered when the form width changes.
+$form.Add_Resize({
+    $closeButton.Left = [int](($form.ClientSize.Width - $closeButton.Width) / 2)
+})
 
 # -----------------------------
 # Events
@@ -1124,6 +1243,7 @@ $startButton.Add_Click({
 
         $psi.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8"
         $psi.EnvironmentVariables["PYTHONUTF8"] = "1"
+        $psi.EnvironmentVariables["PYTHONUNBUFFERED"] = "1"
     } catch {
         # Older hosts may not support every encoding property. Continue with defaults.
     }
@@ -1205,4 +1325,8 @@ Add-Status "Output folder: $OutputDir"
 Update-FileList -FolderPath $script:SourceFolder
 Update-StopButtonAppearance
 
-[void]$form.ShowDialog()
+try {
+    [void]$form.ShowDialog()
+} finally {
+    Release-MediaScribeSingleInstanceMutex
+}

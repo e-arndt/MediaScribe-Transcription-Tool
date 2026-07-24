@@ -50,15 +50,25 @@ Safe movement of Input-folder originals only after successful output verificatio
 
 Automatic GUI source-list refresh after processing
 
+Safe GUI Stop Transcription control
+
+Full active child-process-tree termination for FFmpeg, Python, and Whisper
+
+Single-file Stop and full-batch abort behavior
+
+ABORTED_ marking for incomplete output folders
+
+Distinct stopped-operation exit code 2
+
+UTF-8-safe filename and status output
+
 A preserved terminal/CLI fallback
 
 Basic Idea
 
 MediaScribe uses a simple folder workflow:
 
-Put files into Input
-Run MediaScribe
-Get results in Output
+Put files into InputRun MediaScribeGet results in Output
 
 The GUI also lets users browse to another Source folder, such as a USB drive, Downloads folder, Desktop folder, or external drive.
 
@@ -136,13 +146,7 @@ Normal users should not need to run long PowerShell commands manually.
 
 The intended flow is:
 
-Download / USB / Desktop / extracted ZIP folder
-  Install.bat
-    runs setup.ps1
-      creates or repairs installed MediaScribe folder
-        Start-MediaScribe-GUI.bat
-          runs MediaScribe-GUI.ps1
-            calls transcribe.ps1
+Download / USB / Desktop / extracted ZIP folderInstall.batruns setup.ps1creates or repairs installed MediaScribe folderStart-MediaScribe-GUI.batruns MediaScribe-GUI.ps1calls transcribe.ps1
 
 The GUI is recommended for most users.
 
@@ -190,10 +194,7 @@ Setup creates the installed MediaScribe folder and copies the needed files there
 
 If setup completes successfully and all required dependencies are available, setup may offer launch options such as:
 
-[1] Start MediaScribe GUI
-[2] Start MediaScribe Terminal
-[3] Open Instructions
-[Q] Quit setup
+[1] Start MediaScribe GUI[2] Start MediaScribe Terminal[3] Open Instructions[Q] Quit setup
 
 Choose the GUI for normal use.
 
@@ -241,22 +242,7 @@ Installed Folder
 
 After setup, the installed MediaScribe folder should look similar to this:
 
-MediaScribe/
-  Input/
-  Output/
-  Logs/
-  Models/
-  Tools/
-    ffmpeg/
-      ffmpeg.exe
-      ffprobe.exe
-  config.json
-  Quick Start and Instructions.txt
-  MediaScribe-GUI.ps1
-  MediaScribe.bat
-  README.md
-  Start-MediaScribe-GUI.bat
-  transcribe.ps1
+MediaScribe/Input/Output/Logs/Models/Tools/ffmpeg/ffmpeg.exeffprobe.execonfig.jsonQuick Start and Instructions.txtMediaScribe-GUI.ps1MediaScribe.batREADME.mdStart-MediaScribe-GUI.battranscribe.ps1
 
 The local FFmpeg files are present when bundled FFmpeg was included in the package and copied during setup.
 
@@ -332,7 +318,9 @@ Output Text dropdown
 
 Status section
 
-Start Transcription button
+Start Transcription / Start Batch Transcription button
+
+Stop Transcription button
 
 Open Output Folder button
 
@@ -376,7 +364,7 @@ Do not close the support window while MediaScribe is running.
 
 Close MediaScribe from the GUI when finished.
 
-Closing the GUI is blocked while transcription is active because safe full-process-tree Stop behavior has not yet been implemented.
+Closing the GUI remains blocked while transcription is active. Use Stop Transcription to cancel the active operation safely, then close MediaScribe after it returns to an idle state.
 
 Supported Input Formats
 
@@ -498,9 +486,7 @@ If you know the spoken language, choosing it directly may give more consistent r
 
 Examples:
 
-English audio -> choose English
-Korean audio -> choose Korean
-Unknown language -> choose Auto-detect
+English audio -> choose EnglishKorean audio -> choose KoreanUnknown language -> choose Auto-detect
 
 Input Audio in Multiple-File Mode
 
@@ -534,9 +520,7 @@ This creates a transcript in the same language as the audio.
 
 Examples:
 
-English audio -> English transcript
-Korean audio -> Korean transcript
-Auto-detect Korean audio -> Korean transcript
+English audio -> English transcriptKorean audio -> Korean transcriptAuto-detect Korean audio -> Korean transcript
 
 This uses Whisper's normal transcription mode:
 
@@ -548,9 +532,7 @@ This asks Whisper to translate the spoken audio into English.
 
 Examples:
 
-Korean audio -> English text
-Spanish audio -> English text
-Auto-detect Korean audio -> English text
+Korean audio -> English textSpanish audio -> English textAuto-detect Korean audio -> English text
 
 This uses Whisper's translation mode:
 
@@ -566,13 +548,11 @@ Recommended Mixed-Language Batch Settings
 
 To preserve each recording's language:
 
-Input Audio: Auto-detect
-Output Text: Same as input / detected
+Input Audio: Auto-detectOutput Text: Same as input / detected
 
 To convert all supported spoken languages to English text:
 
-Input Audio: Auto-detect
-Output Text: English translation
+Input Audio: Auto-detectOutput Text: English translation
 
 Live Preview Behavior
 
@@ -580,8 +560,7 @@ For English transcription, MediaScribe can show live transcript preview lines wh
 
 Live preview is enabled for:
 
-Input Audio: English
-Output Text: Same as input / detected
+Input Audio: EnglishOutput Text: Same as input / detected
 
 Live preview is hidden for:
 
@@ -599,8 +578,7 @@ When live preview is hidden, MediaScribe still creates the final transcript file
 
 For hidden-preview jobs, MediaScribe may save Whisper log files in the job folder:
 
-whisper_stdout.log
-whisper_stderr.log
+whisper_stdout.logwhisper_stderr.log
 
 These log files are normal.
 
@@ -620,11 +598,7 @@ Each processed file gets its own output folder.
 
 Example:
 
-Output/
-  My Recording/
-    My Recording.mp4
-    My Recording.wav
-    My Recording.txt
+Output/My Recording/My Recording.mp4My Recording.wavMy Recording.txt
 
 If an output folder already exists for a file name, MediaScribe creates a timestamped sibling folder.
 
@@ -642,7 +616,7 @@ Reserved for bundled tools.
 
 Bundled FFmpeg is copied into:
 
-Tools\ffmpeg\
+Tools\ffmpeg
 
 The local FFmpeg executable path is:
 
@@ -701,6 +675,8 @@ Review the final batch summary.
 Review the separate output folder created for each file.
 
 For folders containing more than one spoken language, use Auto-detect.
+
+To cancel a running GUI operation safely, click Stop Transcription and confirm the request. The default confirmation choice keeps the transcription running.
 
 GUI Multiple-File Mode
 
@@ -776,12 +752,13 @@ The exact presentation may vary, but it identifies the files found and whether e
 
 Conceptual example:
 
-Batch transcription complete.
-Files found: 6
-Completed: 5
-Failed: 1
+Batch transcription complete.Files found: 6Completed: 5Failed: 1
 
 Each successfully completed file remains available in its own Output folder even when another file in the batch fails.
+
+When a batch is stopped, the summary reports:
+
+Batch stopped by user.Files foundCompletedFailedStoppedNot started
 
 Basic Terminal Use After Installation
 
@@ -825,11 +802,7 @@ File Selection in Terminal
 
 When files are found, MediaScribe shows a menu like this:
 
-Recognized files found:
-  [1] First file.mp4
-  [2] Second file.mp3
-  [B] Process all files
-  [Q] Quit
+Recognized files found:[1] First file.mp4[2] Second file.mp3[B] Process all files[Q] Quit
 
 Choose a number to process one file.
 
@@ -841,17 +814,13 @@ Run Again / Refresh
 
 After processing finishes, MediaScribe asks what to do next:
 
-[R] Run again / return to file list
-[O] Open output folder
-[Q] Quit
+[R] Run again / return to file list[O] Open output folder[Q] Quit
 
 Pressing Enter quits.
 
 If no files are found, MediaScribe shows:
 
-[R] Refresh / check again
-[O] Open Input folder
-[Q] Quit
+[R] Refresh / check again[O] Open Input folder[Q] Quit
 
 Pressing Enter refreshes.
 
@@ -871,11 +840,9 @@ Example:
 
 Batch Summary
 
-[OK] First file.mp4
-[OK] Second file.mp3
+[OK] First file.mp4[OK] Second file.mp3
 
-Output folder:
-  Output
+Output folder:Output
 
 Dependencies
 
@@ -903,7 +870,7 @@ FFmpeg
 
 Bundled FFmpeg should be placed in:
 
-Dependencies\FFmpeg\
+Dependencies\FFmpeg
 
 Expected files:
 
@@ -913,7 +880,7 @@ ffprobe.exe
 
 During setup, bundled FFmpeg is copied into the installed runtime folder:
 
-Tools\ffmpeg\
+Tools\ffmpeg
 
 MediaScribe then uses:
 
@@ -923,7 +890,7 @@ Python
 
 A bundled Python installer may be placed in:
 
-Dependencies\Python\
+Dependencies\Python
 
 Example:
 
@@ -979,19 +946,7 @@ MediaScribe reads settings from config.json.
 
 Example installed config:
 
-{
-  "AppName": "MediaScribe",
-  "BaseFolder": "D:\\Documents\\MediaScribe",
-  "InputFolder": "D:\\Documents\\MediaScribe\\Input",
-  "OutputFolder": "D:\\Documents\\MediaScribe\\Output",
-  "LogsFolder": "D:\\Documents\\MediaScribe\\Logs",
-  "ModelsFolder": "D:\\Documents\\MediaScribe\\Models",
-  "DefaultModel": "medium",
-  "DefaultLanguage": "en",
-  "OutputMode": "default",
-  "MoveInputFolderFilesAfterProcessing": true,
-  "ExternalFileArchiveBehavior": "LeaveOriginalInPlace"
-}
+{"AppName": "MediaScribe","BaseFolder": "D:\Documents\MediaScribe","InputFolder": "D:\Documents\MediaScribe\Input","OutputFolder": "D:\Documents\MediaScribe\Output","LogsFolder": "D:\Documents\MediaScribe\Logs","ModelsFolder": "D:\Documents\MediaScribe\Models","DefaultModel": "medium","DefaultLanguage": "en","OutputMode": "default","MoveInputFolderFilesAfterProcessing": true,"ExternalFileArchiveBehavior": "LeaveOriginalInPlace"}
 
 Configuration Fields
 
@@ -1071,11 +1026,9 @@ The GUI calls transcribe.ps1 in non-interactive parameter mode.
 
 The single-file interface includes:
 
--InputFile <path>
--OutputMode default|full
--Model medium|large
--Language en|auto|<Whisper language code>
--Task transcribe|translate
+-InputFile <path>-OutputMode default|full-Model medium|large-Language en|auto|<Whisper language code>-Task transcribe|translate-StopRequestFile <temporary stop-request path>-StateFile <temporary JSON state path>
+
+The StopRequestFile and StateFile parameters support cooperative GUI cancellation, active-stage tracking, orderly cleanup, and forced process-tree fallback if normal stopping hangs.
 
 The multiple-file GUI route uses the backend's non-interactive folder/batch support while preserving the existing interactive terminal batch mode and single-file parameter mode.
 
@@ -1131,7 +1084,9 @@ Input Audio dropdown
 
 Output Text dropdown
 
-Start Transcription button
+Start Transcription / Start Batch Transcription button
+
+Stop Transcription button
 
 Open Output Folder button
 
@@ -1148,6 +1103,18 @@ Sequential multi-file processing
 Final batch results
 
 Post-completion Source-folder refresh
+
+Safe full-process-tree Stop behavior
+
+Single-file cancellation
+
+Full-batch abort
+
+ABORTED_ incomplete-job folders
+
+Stopped-operation exit code 2
+
+UTF-8-safe filename/status output
 
 The GUI calls the existing transcribe.ps1 backend.
 
@@ -1173,116 +1140,177 @@ The existing single-file transcription engine continued to perform the normal wo
 
 This supports treating GUI Multiple-File Mode as implemented and initially tested rather than merely planned.
 
-Planned Stop Transcription Feature
+Implemented Stop Transcription Feature
 
-A safe Stop Transcription feature is the next major planned feature.
+Safe Stop Transcription is implemented and has passed single-file and multiple-file testing.
 
-It is not yet implemented.
+GUI Control Behavior
 
-The feature must terminate the complete process tree, including:
+The GUI uses a separate Stop Transcription button beside the Start control.
 
-GUI-launched backend PowerShell
+While idle:
 
-FFmpeg
+Start Transcription or Start Batch Transcription is enabled.
 
-Python
+Stop Transcription is disabled and uses its normal inactive appearance.
 
-Whisper
+While running:
 
-A superficial stop of only the parent PowerShell process is not sufficient.
+Start is disabled.
 
-Agreed Stop Behavior
+Stop Transcription is enabled.
 
-Stopping will abort the entire active operation.
+The active Stop button uses the existing section-title red with white bold text.
 
-In single-file mode, it will abort the active file.
+After Stop is confirmed:
 
-In multiple-file mode, it will abort:
+Stop is disabled.
 
-The active file
+The button temporarily reads Stopping....
 
-The remaining unstarted batch queue
+The GUI status changes to Stopped after the backend exits with code 2.
 
-It will not merely skip the current file and continue.
+Confirmation Behavior
 
-This design keeps the code and patron workflow simple. The user can clean up the Source/Input folder and restart the batch without manually selecting every file.
+The confirmation explains that stopping will not create a finished transcript for the active file.
 
-Planned Safety Rules
+No, Keep Running is the safe/default choice.
 
-When Stop is confirmed:
+The wording is conditional:
 
-Completed files remain completed.
+Single-file mode reports that MediaScribe is stopping the active transcription.
 
-Unstarted source files remain untouched.
+Batch mode reports that MediaScribe is stopping the active transcription and cancelling the remaining batch.
 
-The active original media remains untouched.
+Full Process-Tree Stop
 
-The incomplete active output/job folder is preserved.
+The GUI creates a unique temporary stop-request file and state file for each run.
 
-Only the incomplete job-folder name receives an ABORTED_ prefix.
+The backend checks for the stop request while FFmpeg or Whisper is active.
 
-Files inside the incomplete folder are not individually renamed.
+Normal Stop behavior terminates the active FFmpeg, Python, and Whisper process tree while keeping the backend alive long enough to perform orderly cleanup.
 
-Partial WAV and log files may be retained for review or cleanup.
+The GUI also includes a forced full-tree fallback if normal stopping does not complete within the configured grace period.
+
+Exit Codes
+
+0 = completed successfully
+
+1 = completed with errors
+
+2 = stopped by user
+
+Single-File Stop Behavior
+
+In Selected file mode:
+
+The active transcription is stopped.
+
+The original source media remains unchanged.
+
+The incomplete job folder is preserved.
+
+The incomplete job folder is renamed with an ABORTED_ prefix and timestamp.
 
 The GUI returns to an idle, usable state.
 
-The current settings remain available for retry.
+Multiple-File Stop Behavior
 
-Example incomplete folder:
+In All files in source folder mode:
 
-Output\ABORTED_grandma 80th birthday_20260723_171500
+The active file is stopped.
 
-Clearly labeled ABORTED_ folders can be reviewed or deleted by the user, library staff, or a Family History Center technician.
+The entire remaining unstarted batch queue is cancelled.
 
-Planned Confirmation Wording
+Completed files remain completed.
 
-MediaScribe is still working on this file.
+The active original source media remains unchanged.
 
-If you stop now, MediaScribe will not create a finished transcript.
+Unstarted source files remain untouched.
 
-Do you want to stop transcription?
+The active incomplete job folder is renamed with ABORTED_.
 
-The safe/default response should be:
+The batch does not skip the active file and continue.
 
-No, Keep Running
+The stopped-batch summary reports Files found, Completed, Failed, Stopped, and Not started.
 
-Planned Batch Stop Summary
+ABORTED_ Safety and Cleanup
 
-A stopped batch should conceptually report:
+Only the active incomplete job-folder name receives the ABORTED_ prefix.
 
-Batch stopped by user.
-Files found: 6
-Completed: 2
-Failed: 0
-Stopped: 1
-Not started: 3
+The original media filename is not changed.
 
-The exact wording may be refined during implementation.
+Files inside the incomplete folder are not individually renamed.
+
+Partial WAV audio, logs, and other incomplete output may be retained.
+
+Previous completed jobs and the main Output folder are not deleted.
+
+Example:
+
+Output\ABORTED_grandma 80th birthday_20260723_205808
+
+ABORTED_ folders may be reviewed, retained, or deleted by the user, library staff, or a Family History Center technician.
+
+Tested Stop and Regression Checkpoint
+
+Confirmed behavior:
+
+Normal single-file transcription completes with exit code 0.
+
+A complete mixed-language Auto-detect batch completes with exit code 0.
+
+Single-file Stop returns exit code 2.
+
+Batch Stop returns exit code 2.
+
+Completed batch files remain completed.
+
+Completed Input-folder originals move into their completed job folders.
+
+The active stopped original remains in the Source/Input folder.
+
+Unstarted batch files remain untouched.
+
+The active incomplete folder receives the ABORTED_ prefix.
+
+Stopped-batch counts correctly report Completed, Failed, Stopped, and Not started.
+
+Accented filenames such as Rosé remain correct in GUI, backend, folder, and summary output.
+
+PSScriptAnalyzer / VS Code reports no workspace problems after the completed changes.
+
+Current Development Status
+
+GUI Multiple-File Mode is implemented, tested, documented, and committed.
+
+Safe Stop Transcription is implemented, tested, documented, and committed.
+
+The CLI remains the supported fallback and existing terminal workflow.
+
+The controlled Stop button is currently a GUI feature. The backend StopRequestFile design remains reusable by another launcher or future terminal control.
 
 Recommended Next Development Sequence
 
-Preserve the working multi-file checkpoint.
+Preserve the committed Stop checkpoint.
 
-Update README.md and Quick Start and Instructions.txt for GUI Multiple-File Mode.
+Update the current development snapshot so Stop moves from planned to implemented and tested.
 
-Run a documentation review for exact GUI labels and current filenames.
+Review setup.ps1 and installer copy lists to confirm the current README.md and Quick Start and Instructions.txt filenames.
 
-Commit the stable multi-file implementation and documentation.
+Run clean-install and repair-install tests using the committed files.
 
-Design full process-tree termination for Stop Transcription.
+Test the installed GUI and installed terminal fallback.
 
-Implement single-file Stop behavior first if that simplifies testing.
+Review whether an Open Instructions GUI button would improve patron usability.
 
-Apply the same full-abort behavior to GUI multiple-file mode.
+Consider media-duration display through FFprobe.
 
-Add ABORTED_ folder handling.
+Add staff-facing cleanup guidance for ABORTED_ folders where appropriate.
 
-Add user/staff cleanup guidance.
+Complete USB/extracted-ZIP packaging tests.
 
-Run single-file and multi-file Stop regression tests.
-
-Create the next project snapshot.
+Create the next release-oriented snapshot.
 
 Development Rules
 

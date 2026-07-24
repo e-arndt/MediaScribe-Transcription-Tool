@@ -33,6 +33,7 @@ try {
 
 $env:PYTHONIOENCODING = "utf-8"
 $env:PYTHONUTF8 = "1"
+$env:PYTHONUNBUFFERED = "1"
 
 function New-DefaultConfig {
   $defaultBaseFolder = $PSScriptRoot
@@ -358,11 +359,44 @@ function Stop-MediaScribeProcessTree {
 }
 
 function Wait-MediaScribeChildProcess {
-  param([System.Diagnostics.Process]$Process)
+  param(
+    [System.Diagnostics.Process]$Process,
+    [bool]$AllowInteractiveStop = $false,
+    [bool]$InteractiveBatchMode = $false
+  )
 
   while ($true) {
-    if (Test-StopRequested) {
-      Stop-MediaScribeProcessTree -Process $Process
+    $stopConfirmed = Test-StopRequested
+
+    if (-not $stopConfirmed -and $AllowInteractiveStop) {
+      $stopConfirmed = Confirm-InteractiveStopRequest -BatchMode:$InteractiveBatchMode
+    }
+
+    if ($stopConfirmed) {
+      Write-Warn "Stop confirmed. MediaScribe is stopping safely."
+
+      $processStillRunning = $true
+
+      try {
+        $processStillRunning = -not $Process.HasExited
+      } catch {
+        # If process state cannot be read, use the safe process-tree stop path.
+        $processStillRunning = $true
+      }
+
+      if ($processStillRunning) {
+        Stop-MediaScribeProcessTree -Process $Process
+      } else {
+        try {
+          $Process.WaitForExit()
+          $Process.Refresh()
+        } catch {
+          # The process already ended. The confirmed user Stop still applies.
+        }
+      }
+
+      # A confirmed Stop remains a stopped operation even when the child
+      # happens to finish while the confirmation prompt is being answered.
       return [pscustomobject]@{
         Aborted = $true
         ExitCode = 2
@@ -428,6 +462,30 @@ function Move-JobFolderToAborted {
   }
 
   return $JobDir
+}
+
+function Remove-EmptyFailedJobFolder {
+  param([string]$JobDir)
+
+  if ([string]::IsNullOrWhiteSpace($JobDir) -or -not (Test-Path -LiteralPath $JobDir -PathType Container)) {
+    return $false
+  }
+
+  try {
+    $firstItem = Get-ChildItem -LiteralPath $JobDir -Force -ErrorAction Stop |
+      Select-Object -First 1
+
+    if ($null -ne $firstItem) {
+      return $false
+    }
+
+    Remove-Item -LiteralPath $JobDir -Force -ErrorAction Stop
+    return $true
+  } catch {
+    Write-Warn "The empty failed job folder could not be removed automatically."
+    Write-Host "  $JobDir"
+    return $false
+  }
 }
 
 $ConfigPath = Join-Path $PSScriptRoot "config.json"
@@ -562,6 +620,94 @@ function Write-Warn {
 function Write-ErrorMessage {
   param([string]$Message)
   Write-Host "[ERROR] $Message" -ForegroundColor Red
+}
+
+function Write-Stopped {
+  param([string]$Message)
+  Write-Host "[STOPPED] $Message" -ForegroundColor Yellow
+}
+
+function Write-NotStarted {
+  param([string]$Message)
+  Write-Host "[NOT STARTED] $Message" -ForegroundColor Yellow
+}
+
+function Write-Failed {
+  param([string]$Message)
+  Write-Host "[FAILED] $Message" -ForegroundColor Red
+}
+
+function Write-InteractiveStopHint {
+  param([bool]$BatchMode = $false)
+
+  Write-Host ""
+  if ($BatchMode) {
+    Write-Host "  [S] Stop transcription safely and cancel the remaining batch" -ForegroundColor Yellow
+  } else {
+    Write-Host "  [S] Stop transcription safely" -ForegroundColor Yellow
+  }
+  Write-Host ""
+}
+
+function Confirm-InteractiveStopRequest {
+  param([bool]$BatchMode = $false)
+
+  try {
+    if (-not [Console]::KeyAvailable) {
+      return $false
+    }
+
+    $pressedKey = [Console]::ReadKey($true)
+  } catch {
+    # Interactive key polling is unavailable when console input is redirected.
+    return $false
+  }
+
+  if ($pressedKey.Key -ne [ConsoleKey]::S) {
+    return $false
+  }
+
+  Write-Host ""
+  Write-Warn "MediaScribe is still working on this file."
+  Write-Warn "Stopping will leave the active job incomplete."
+
+  if ($BatchMode) {
+    Write-Warn "The remaining files in this batch will not start."
+  }
+
+  Write-Host ""
+  Write-Host "Stop transcription?" -ForegroundColor Yellow
+  Write-Host "  [Y] Yes, stop" -ForegroundColor Yellow
+  Write-Host "  [N] No, keep running" -ForegroundColor Yellow
+  Write-DefaultLine "Default: No, keep running"
+  Write-Host "Choice (Y/N, default N): " -NoNewline -ForegroundColor Yellow
+
+  while ($true) {
+    try {
+      $confirmationKey = [Console]::ReadKey($true)
+    } catch {
+      Write-Host ""
+      Write-Warn "Stop confirmation could not be read. Transcription will continue."
+      return $false
+    }
+
+    if ($confirmationKey.Key -eq [ConsoleKey]::Y) {
+      Write-Host "Y"
+      return $true
+    }
+
+    if ($confirmationKey.Key -eq [ConsoleKey]::N) {
+      Write-Host "N"
+      Write-Warn "Stop cancelled. Transcription will continue."
+      return $false
+    }
+
+    if ($confirmationKey.Key -eq [ConsoleKey]::Enter) {
+      Write-Host ""
+      Write-Warn "Stop cancelled. Transcription will continue."
+      return $false
+    }
+  }
 }
 
 function Write-DefaultLine {
@@ -708,6 +854,133 @@ function Select-WhisperModel {
   return $DefaultModel
 }
 
+
+function Get-InputAudioLabel {
+  param([string]$LanguageValue)
+
+  $normalizedLanguage = Resolve-WhisperLanguage -LanguageValue $LanguageValue -FallbackLanguage "en"
+
+  switch ($normalizedLanguage) {
+    "auto" { return "Auto-detect" }
+    "zh"   { return "Chinese" }
+    "fr"   { return "French" }
+    "de"   { return "German" }
+    "it"   { return "Italian" }
+    "ja"   { return "Japanese" }
+    "ko"   { return "Korean" }
+    "pt"   { return "Portuguese" }
+    "es"   { return "Spanish" }
+    default { return "English" }
+  }
+}
+
+function Select-InputAudioLanguage {
+  param([string]$DefaultLanguage)
+
+  $normalizedDefault = Resolve-WhisperLanguage -LanguageValue $DefaultLanguage -FallbackLanguage "en"
+  $defaultLabel = Get-InputAudioLabel -LanguageValue $normalizedDefault
+
+  Write-Host ""
+  Write-Section "Input Audio"
+  Write-Host "Input Audio means the language spoken in the recording." -ForegroundColor Yellow
+  Write-Host ""
+  Write-Host "  [E] English" -ForegroundColor Yellow
+  Write-Host "  [A] Auto-detect" -ForegroundColor Green
+  Write-Host "  [C] Chinese" -ForegroundColor Yellow
+  Write-Host "  [F] French" -ForegroundColor Yellow
+  Write-Host "  [G] German" -ForegroundColor Yellow
+  Write-Host "  [I] Italian" -ForegroundColor Yellow
+  Write-Host "  [J] Japanese" -ForegroundColor Yellow
+  Write-Host "  [K] Korean" -ForegroundColor Yellow
+  Write-Host "  [P] Portuguese" -ForegroundColor Yellow
+  Write-Host "  [S] Spanish" -ForegroundColor Yellow
+  Write-Host ""
+  Write-DefaultLine "Default: $defaultLabel"
+
+  while ($true) {
+    $languageChoice = Read-Host "Input audio (E/A/C/F/G/I/J/K/P/S)"
+
+    if ([string]::IsNullOrWhiteSpace($languageChoice)) {
+      return $normalizedDefault
+    }
+
+    switch ($languageChoice.Trim().ToUpperInvariant()) {
+      "E"         { return "en" }
+      "EN"        { return "en" }
+      "ENGLISH"   { return "en" }
+      "A"         { return "auto" }
+      "AUTO"      { return "auto" }
+      "AUTODETECT" { return "auto" }
+      "AUTO-DETECT" { return "auto" }
+      "C"         { return "zh" }
+      "ZH"        { return "zh" }
+      "CHINESE"   { return "zh" }
+      "F"         { return "fr" }
+      "FR"        { return "fr" }
+      "FRENCH"    { return "fr" }
+      "G"         { return "de" }
+      "DE"        { return "de" }
+      "GERMAN"    { return "de" }
+      "I"         { return "it" }
+      "IT"        { return "it" }
+      "ITALIAN"   { return "it" }
+      "J"         { return "ja" }
+      "JA"        { return "ja" }
+      "JAPANESE"  { return "ja" }
+      "K"         { return "ko" }
+      "KO"        { return "ko" }
+      "KOREAN"    { return "ko" }
+      "P"         { return "pt" }
+      "PT"        { return "pt" }
+      "PORTUGUESE" { return "pt" }
+      "S"         { return "es" }
+      "ES"        { return "es" }
+      "SPANISH"   { return "es" }
+      default {
+        Write-Warn "Invalid language selection. Choose one of the displayed options."
+      }
+    }
+  }
+}
+
+function Select-OutputTextTask {
+  param([string]$DefaultTask)
+
+  $normalizedDefault = Resolve-WhisperTask -TaskValue $DefaultTask
+  $defaultLabel = if ($normalizedDefault -eq "translate") {
+    "English translation"
+  } else {
+    "Same as input / detected"
+  }
+
+  Write-Host ""
+  Write-Section "Output Text"
+  Write-Host "  [S] Same as input / detected" -ForegroundColor Yellow
+  Write-Host "  [E] English translation" -ForegroundColor Green
+  Write-Host ""
+  Write-DefaultLine "Default: $defaultLabel"
+
+  while ($true) {
+    $taskChoice = Read-Host "Output text (S/E)"
+
+    if ([string]::IsNullOrWhiteSpace($taskChoice)) {
+      return $normalizedDefault
+    }
+
+    switch ($taskChoice.Trim().ToUpperInvariant()) {
+      "S"         { return "transcribe" }
+      "SAME"      { return "transcribe" }
+      "TRANSCRIBE" { return "transcribe" }
+      "E"         { return "translate" }
+      "ENGLISH"   { return "translate" }
+      "TRANSLATE" { return "translate" }
+      default {
+        Write-Warn "Invalid output-text selection. Choose S or E."
+      }
+    }
+  }
+}
+
 function Invoke-TranscriptionFile {
   param(
     [System.IO.FileInfo]$SelectedInputFile,
@@ -718,7 +991,9 @@ function Invoke-TranscriptionFile {
     [bool]$OpenFolderWhenDone = $false,
     [int]$CurrentIndex = 1,
     [int]$TotalFiles = 1,
-    [string]$RunMode = "Single"
+    [string]$RunMode = "Single",
+    [bool]$AllowInteractiveStop = $false,
+    [bool]$InteractiveBatchMode = $false
   )
 
   $WhisperOutputFormat = if ($SelectedOutputMode -eq "full") { "all" } else { "txt" }
@@ -785,6 +1060,10 @@ function Invoke-TranscriptionFile {
     Write-Info "Output text: Same as input / detected"
   }
 
+  if ($AllowInteractiveStop) {
+    Write-InteractiveStopHint -BatchMode:$InteractiveBatchMode
+  }
+
   # Create WAV in the job folder.
   $WavPath = Join-Path $JobDir "$BaseName.wav"
 
@@ -807,7 +1086,7 @@ function Invoke-TranscriptionFile {
 
   $ffmpegProcess = Start-Process -FilePath $ResolvedFFmpegCommand.FilePath -ArgumentList $ffmpegArgs -NoNewWindow -PassThru
   Write-TranscriptionState -Mode $RunMode -Stage "FFmpeg" -CurrentFile $SelectedInputFile.Name -CurrentIndex $CurrentIndex -TotalFiles $TotalFiles -JobDir $JobDir -ChildPid $ffmpegProcess.Id
-  $ffmpegResult = Wait-MediaScribeChildProcess -Process $ffmpegProcess
+  $ffmpegResult = Wait-MediaScribeChildProcess -Process $ffmpegProcess -AllowInteractiveStop:$AllowInteractiveStop -InteractiveBatchMode:$InteractiveBatchMode
 
   if ($ffmpegResult.Aborted) {
     $abortedJobDir = Move-JobFolderToAborted -JobDir $JobDir
@@ -836,9 +1115,16 @@ function Invoke-TranscriptionFile {
     Write-Host "Failed to create WAV file. DRM/protected media or unsupported codec may be the cause."
     Write-Host "Install or update FFmpeg, then retry."
 
+    $failedJobDir = $JobDir
+
+    if (Remove-EmptyFailedJobFolder -JobDir $JobDir) {
+      Write-Info "Removed empty failed job folder."
+      $failedJobDir = $OutputDir
+    }
+
     return [pscustomobject]@{
       FileName = $SelectedInputFile.Name
-      JobDir   = $JobDir
+      JobDir   = $failedJobDir
       ExitCode = 1
       Success  = $false
       Aborted  = $false
@@ -882,6 +1168,7 @@ function Invoke-TranscriptionFile {
   # Encourage Python/Whisper to use UTF-8 where possible.
   $env:PYTHONIOENCODING = "utf-8"
   $env:PYTHONUTF8 = "1"
+  $env:PYTHONUNBUFFERED = "1"
 
   try {
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -893,7 +1180,7 @@ function Invoke-TranscriptionFile {
 
   if ($ResolvedWhisperCommand.Mode -eq "PythonModule") {
     $whisperArgs = @(
-      "-m", "whisper",
+      "-u", "-m", "whisper",
       "`"$WavPath`"",
       "--model", $WhisperModel,
       "--fp16", "False",
@@ -953,7 +1240,7 @@ function Invoke-TranscriptionFile {
     }
 
     Write-TranscriptionState -Mode $RunMode -Stage "Whisper" -CurrentFile $SelectedInputFile.Name -CurrentIndex $CurrentIndex -TotalFiles $TotalFiles -JobDir $JobDir -ChildPid $whisperProcess.Id
-    $whisperResult = Wait-MediaScribeChildProcess -Process $whisperProcess
+    $whisperResult = Wait-MediaScribeChildProcess -Process $whisperProcess -AllowInteractiveStop:$AllowInteractiveStop -InteractiveBatchMode:$InteractiveBatchMode
 
     if ($null -eq $previousTqdmDisable) {
       Remove-Item Env:\TQDM_DISABLE -ErrorAction SilentlyContinue
@@ -1187,11 +1474,11 @@ if ($BatchParameterMode) {
 
   foreach ($result in $results) {
     if ($result.Aborted) {
-      Write-Warn "$($result.FileName) - Stopped by user"
+      Write-Stopped "$($result.FileName) - Stopped by user"
     } elseif ($result.Success) {
       Write-Ok "$($result.FileName)"
     } else {
-      Write-Warn "$($result.FileName) - $($result.Message)"
+      Write-Failed "$($result.FileName) - $($result.Message)"
     }
   }
 
@@ -1205,16 +1492,22 @@ if ($BatchParameterMode) {
   if ($batchStopped) {
     Write-Warn "Batch stopped by user."
     Write-Info "Files found: $($selectedFiles.Count)"
-    Write-Info "Completed: $successCount"
-    Write-Info "Failed: $failureCount"
-    Write-Info "Stopped: $stoppedCount"
-    Write-Info "Not started: $notStartedCount"
-    Write-TranscriptionState -Mode "Batch" -Stage "Stopped" -CurrentFile "" -CurrentIndex $results.Count -TotalFiles $selectedFiles.Count -JobDir ""
-  } else {
-    Write-Info "Successful: $successCount"
+    Write-Ok "Completed: $successCount"
 
     if ($failureCount -gt 0) {
-      Write-Warn "Failed: $failureCount"
+      Write-Failed "Failed: $failureCount"
+    } else {
+      Write-Info "Failed: 0"
+    }
+
+    Write-Stopped "Stopped: $stoppedCount"
+    Write-NotStarted "Not started: $notStartedCount"
+    Write-TranscriptionState -Mode "Batch" -Stage "Stopped" -CurrentFile "" -CurrentIndex $results.Count -TotalFiles $selectedFiles.Count -JobDir ""
+  } else {
+    Write-Ok "Successful: $successCount"
+
+    if ($failureCount -gt 0) {
+      Write-Failed "Failed: $failureCount"
     } else {
       Write-Info "Failed: 0"
     }
@@ -1331,7 +1624,8 @@ if ($BatchParameterMode) {
   Write-Info "Output mode selected: $SelectedOutputMode"
 
   $WhisperModel = Select-WhisperModel -DefaultModel $DefaultModel
-  $WhisperLanguage = $DefaultLanguage
+  $WhisperLanguage = Select-InputAudioLanguage -DefaultLanguage $DefaultLanguage
+  $WhisperTask = Select-OutputTextTask -DefaultTask $WhisperTask
 
   Clear-Host
 
@@ -1355,6 +1649,7 @@ if ($BatchParameterMode) {
   }
 
   $results = @()
+  $batchStopped = $false
 
   for ($i = 0; $i -lt $selectedFiles.Count; $i++) {
     $currentFile = $selectedFiles[$i]
@@ -1364,26 +1659,82 @@ if ($BatchParameterMode) {
       Write-Info "File: $($currentFile.Name)"
     }
 
+    $runMode = if ($batchMode) { "Batch" } else { "Single" }
+
     $result = Invoke-TranscriptionFile `
       -SelectedInputFile $currentFile `
       -SelectedOutputMode $SelectedOutputMode `
       -WhisperModel $WhisperModel `
       -WhisperLanguage $WhisperLanguage `
       -WhisperTask $WhisperTask `
-      -OpenFolderWhenDone:$false
+      -OpenFolderWhenDone:$false `
+      -CurrentIndex ($i + 1) `
+      -TotalFiles $selectedFiles.Count `
+      -RunMode $runMode `
+      -AllowInteractiveStop:$true `
+      -InteractiveBatchMode:$batchMode
 
     $results += $result
+
+    if ($result.Aborted) {
+      $batchStopped = $batchMode
+      break
+    }
   }
+
+  $successCount = @($results | Where-Object { $_.Success }).Count
+  $stoppedCount = @($results | Where-Object { $_.Aborted }).Count
+  $failureCount = @($results | Where-Object { -not $_.Success -and -not $_.Aborted }).Count
+  $notStartedCount = $selectedFiles.Count - $results.Count
 
   if ($batchMode) {
     Write-Section "Batch Summary"
 
     foreach ($result in $results) {
-      if ($result.Success) {
+      if ($result.Aborted) {
+        Write-Stopped "$($result.FileName)"
+      } elseif ($result.Success) {
         Write-Ok "$($result.FileName)"
       } else {
-        Write-Warn "$($result.FileName) - $($result.Message)"
+        Write-Failed "$($result.FileName) - $($result.Message)"
       }
+    }
+
+    if ($notStartedCount -gt 0) {
+      for ($notStartedIndex = $results.Count; $notStartedIndex -lt $selectedFiles.Count; $notStartedIndex++) {
+        Write-NotStarted "$($selectedFiles[$notStartedIndex].Name)"
+      }
+    }
+
+    Write-Host ""
+
+    if ($batchStopped) {
+      Write-Warn "Batch stopped by user."
+    } elseif ($failureCount -gt 0) {
+      Write-ErrorMessage "Batch completed with failures."
+    } else {
+      Write-Ok "Batch completed successfully."
+    }
+
+    Write-Info "Files found: $($selectedFiles.Count)"
+    Write-Ok "Completed: $successCount"
+
+    if ($failureCount -gt 0) {
+      Write-Failed "Failed: $failureCount"
+    } else {
+      Write-Info "Failed: 0"
+    }
+
+    if ($stoppedCount -gt 0) {
+      Write-Stopped "Stopped: $stoppedCount"
+    } else {
+      Write-Info "Stopped: 0"
+    }
+
+    if ($notStartedCount -gt 0) {
+      Write-NotStarted "Not started: $notStartedCount"
+    } else {
+      Write-Info "Not started: 0"
     }
 
     Write-Host ""
@@ -1394,7 +1745,14 @@ if ($BatchParameterMode) {
   $nextOpenTarget = if ($batchMode) { $OutputDir } else { $results[0].JobDir }
 
   Write-Section "Next Step"
-  Write-Ok "Processing complete."
+
+  if ($stoppedCount -gt 0) {
+    Write-Warn "Transcription stopped by user."
+  } elseif ($failureCount -gt 0) {
+    Write-ErrorMessage "Processing completed with failures."
+  } else {
+    Write-Ok "Processing complete."
+  }
   Write-Host ""
   Write-Host "What would you like to do next?"
   Write-Host "  [R] Run again / return to file list" -ForegroundColor Yellow
