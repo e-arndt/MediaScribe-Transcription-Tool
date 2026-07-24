@@ -9,6 +9,8 @@ param(
     [string]$OutputFolder,
     [string]$Model,
     [string]$Language,
+    [string]$StopRequestFile,
+    [string]$StateFile,
 
     [ValidateSet("default", "full")]
     [string]$OutputMode,
@@ -16,6 +18,21 @@ param(
     [ValidateSet("transcribe", "translate")]
     [string]$Task
 )
+
+# Use UTF-8 from the beginning of the backend process so filenames with
+# accented or non-ASCII characters display correctly in redirected GUI output.
+try {
+  $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+  [Console]::OutputEncoding = $utf8NoBom
+  [Console]::InputEncoding = $utf8NoBom
+  $script:OutputEncoding = $utf8NoBom
+  $global:OutputEncoding = $utf8NoBom
+} catch {
+  # Continue with the host defaults if encoding initialization is unavailable.
+}
+
+$env:PYTHONIOENCODING = "utf-8"
+$env:PYTHONUTF8 = "1"
 
 function New-DefaultConfig {
   $defaultBaseFolder = $PSScriptRoot
@@ -256,6 +273,161 @@ function Test-PathInsideFolder {
   } catch {
     return $false
   }
+}
+
+
+function Test-StopRequested {
+  if ([string]::IsNullOrWhiteSpace($StopRequestFile)) {
+    return $false
+  }
+
+  return (Test-Path -LiteralPath $StopRequestFile -PathType Leaf)
+}
+
+function Write-TranscriptionState {
+  param(
+    [string]$Mode,
+    [string]$Stage,
+    [string]$CurrentFile,
+    [int]$CurrentIndex = 0,
+    [int]$TotalFiles = 0,
+    [string]$JobDir,
+    [int]$ChildPid = 0
+  )
+
+  if ([string]::IsNullOrWhiteSpace($StateFile)) {
+    return
+  }
+
+  try {
+    $state = [ordered]@{
+      Mode         = $Mode
+      Stage        = $Stage
+      CurrentFile  = $CurrentFile
+      CurrentIndex = $CurrentIndex
+      TotalFiles   = $TotalFiles
+      JobDir       = $JobDir
+      BackendPid   = $PID
+      ChildPid     = $ChildPid
+      Updated      = (Get-Date).ToString('o')
+    }
+
+    $stateFolder = Split-Path -Parent $StateFile
+    if (-not [string]::IsNullOrWhiteSpace($stateFolder) -and -not (Test-Path -LiteralPath $stateFolder)) {
+      New-Item -ItemType Directory -Path $stateFolder -Force | Out-Null
+    }
+
+    $temporaryStateFile = "$StateFile.tmp"
+    $state | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $temporaryStateFile -Encoding UTF8
+    Move-Item -LiteralPath $temporaryStateFile -Destination $StateFile -Force
+  } catch {
+    # State reporting is helpful but must never stop transcription.
+  }
+}
+
+function Stop-MediaScribeProcessTree {
+  param([System.Diagnostics.Process]$Process)
+
+  if ($null -eq $Process) {
+    return
+  }
+
+  try {
+    if ($Process.HasExited) {
+      return
+    }
+  } catch {
+    return
+  }
+
+  try {
+    & taskkill.exe /PID $Process.Id /T /F 2>$null | Out-Null
+  } catch {
+    try {
+      $Process.Kill()
+    } catch {
+      # The process may already have exited.
+    }
+  }
+
+  try {
+    [void]$Process.WaitForExit(5000)
+  } catch {
+    # Continue with cleanup even if Windows does not report exit promptly.
+  }
+}
+
+function Wait-MediaScribeChildProcess {
+  param([System.Diagnostics.Process]$Process)
+
+  while ($true) {
+    if (Test-StopRequested) {
+      Stop-MediaScribeProcessTree -Process $Process
+      return [pscustomobject]@{
+        Aborted = $true
+        ExitCode = 2
+      }
+    }
+
+    try {
+      if ($Process.WaitForExit(250)) {
+        # Complete the wait so redirected output streams are fully drained,
+        # then refresh the process object before reading ExitCode.
+        $Process.WaitForExit()
+        $Process.Refresh()
+
+        return [pscustomobject]@{
+          Aborted = $false
+          ExitCode = [int]$Process.ExitCode
+        }
+      }
+    } catch {
+      return [pscustomobject]@{
+        Aborted = $false
+        ExitCode = 1
+      }
+    }
+  }
+}
+
+function Move-JobFolderToAborted {
+  param([string]$JobDir)
+
+  if ([string]::IsNullOrWhiteSpace($JobDir) -or -not (Test-Path -LiteralPath $JobDir -PathType Container)) {
+    return $JobDir
+  }
+
+  $parentFolder = Split-Path -Parent $JobDir
+  $currentName = Split-Path -Leaf $JobDir
+  $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+  $baseAbortedName = if ($currentName.StartsWith('ABORTED_', [System.StringComparison]::OrdinalIgnoreCase)) {
+    "{0}_{1}" -f $currentName, $stamp
+  } else {
+    "ABORTED_{0}_{1}" -f $currentName, $stamp
+  }
+
+  $abortedPath = Join-Path $parentFolder $baseAbortedName
+  $counter = 1
+  while (Test-Path -LiteralPath $abortedPath) {
+    $abortedPath = Join-Path $parentFolder ("{0}_{1}" -f $baseAbortedName, $counter)
+    $counter++
+  }
+
+  for ($attempt = 1; $attempt -le 10; $attempt++) {
+    try {
+      Move-Item -LiteralPath $JobDir -Destination $abortedPath -ErrorAction Stop
+      return $abortedPath
+    } catch {
+      if ($attempt -eq 10) {
+        Write-Warn "The incomplete job folder could not be renamed automatically."
+        Write-Host "  $JobDir"
+        return $JobDir
+      }
+      Start-Sleep -Milliseconds 300
+    }
+  }
+
+  return $JobDir
 }
 
 $ConfigPath = Join-Path $PSScriptRoot "config.json"
@@ -543,7 +715,10 @@ function Invoke-TranscriptionFile {
     [string]$WhisperModel,
     [string]$WhisperLanguage,
     [string]$WhisperTask = "transcribe",
-    [bool]$OpenFolderWhenDone = $false
+    [bool]$OpenFolderWhenDone = $false,
+    [int]$CurrentIndex = 1,
+    [int]$TotalFiles = 1,
+    [string]$RunMode = "Single"
   )
 
   $WhisperOutputFormat = if ($SelectedOutputMode -eq "full") { "all" } else { "txt" }
@@ -565,6 +740,29 @@ function Invoke-TranscriptionFile {
   }
 
   New-Item -ItemType Directory -Path $JobDir -Force | Out-Null
+
+  Write-TranscriptionState `
+    -Mode $RunMode `
+    -Stage "Preparing" `
+    -CurrentFile $SelectedInputFile.Name `
+    -CurrentIndex $CurrentIndex `
+    -TotalFiles $TotalFiles `
+    -JobDir $JobDir
+
+  if (Test-StopRequested) {
+    $abortedJobDir = Move-JobFolderToAborted -JobDir $JobDir
+    Write-Warn "Transcription stopped before processing began."
+    Write-Info "Incomplete job folder: $abortedJobDir"
+    Write-TranscriptionState -Mode $RunMode -Stage "Stopped" -CurrentFile $SelectedInputFile.Name -CurrentIndex $CurrentIndex -TotalFiles $TotalFiles -JobDir $abortedJobDir
+    return [pscustomobject]@{
+      FileName = $SelectedInputFile.Name
+      JobDir   = $abortedJobDir
+      ExitCode = 2
+      Success  = $false
+      Aborted  = $true
+      Message  = "Stopped by user"
+    }
+  }
 
   Write-Section "Transcription Settings"
   Write-Info "Selected file: $($SelectedInputFile.Name)"
@@ -607,8 +805,28 @@ function Invoke-TranscriptionFile {
     "-y"
   )
 
-  $ffmpegProcess = Start-Process -FilePath $ResolvedFFmpegCommand.FilePath -ArgumentList $ffmpegArgs -NoNewWindow -Wait -PassThru
-  $ffmpegExit = $ffmpegProcess.ExitCode
+  $ffmpegProcess = Start-Process -FilePath $ResolvedFFmpegCommand.FilePath -ArgumentList $ffmpegArgs -NoNewWindow -PassThru
+  Write-TranscriptionState -Mode $RunMode -Stage "FFmpeg" -CurrentFile $SelectedInputFile.Name -CurrentIndex $CurrentIndex -TotalFiles $TotalFiles -JobDir $JobDir -ChildPid $ffmpegProcess.Id
+  $ffmpegResult = Wait-MediaScribeChildProcess -Process $ffmpegProcess
+
+  if ($ffmpegResult.Aborted) {
+    $abortedJobDir = Move-JobFolderToAborted -JobDir $JobDir
+    Write-Section "Stopped"
+    Write-Warn "Transcription was stopped by the user."
+    Write-Info "The original media file was left unchanged."
+    Write-Info "Incomplete job folder: $abortedJobDir"
+    Write-TranscriptionState -Mode $RunMode -Stage "Stopped" -CurrentFile $SelectedInputFile.Name -CurrentIndex $CurrentIndex -TotalFiles $TotalFiles -JobDir $abortedJobDir
+    return [pscustomobject]@{
+      FileName = $SelectedInputFile.Name
+      JobDir   = $abortedJobDir
+      ExitCode = 2
+      Success  = $false
+      Aborted  = $true
+      Message  = "Stopped by user"
+    }
+  }
+
+  $ffmpegExit = $ffmpegResult.ExitCode
 
   if ($ffmpegExit -ne 0) {
     Write-Warn "FFmpeg exited with code $ffmpegExit"
@@ -623,6 +841,7 @@ function Invoke-TranscriptionFile {
       JobDir   = $JobDir
       ExitCode = 1
       Success  = $false
+      Aborted  = $false
       Message  = "WAV creation failed"
     }
   }
@@ -715,7 +934,6 @@ function Invoke-TranscriptionFile {
         -FilePath $ResolvedWhisperCommand.FilePath `
         -ArgumentList $whisperArgs `
         -NoNewWindow `
-        -Wait `
         -PassThru `
         -ErrorAction Stop
     } else {
@@ -728,12 +946,14 @@ function Invoke-TranscriptionFile {
         -FilePath $ResolvedWhisperCommand.FilePath `
         -ArgumentList $whisperArgs `
         -NoNewWindow `
-        -Wait `
         -PassThru `
         -RedirectStandardOutput $whisperStdOutLog `
         -RedirectStandardError $whisperStdErrLog `
         -ErrorAction Stop
     }
+
+    Write-TranscriptionState -Mode $RunMode -Stage "Whisper" -CurrentFile $SelectedInputFile.Name -CurrentIndex $CurrentIndex -TotalFiles $TotalFiles -JobDir $JobDir -ChildPid $whisperProcess.Id
+    $whisperResult = Wait-MediaScribeChildProcess -Process $whisperProcess
 
     if ($null -eq $previousTqdmDisable) {
       Remove-Item Env:\TQDM_DISABLE -ErrorAction SilentlyContinue
@@ -741,7 +961,25 @@ function Invoke-TranscriptionFile {
       $env:TQDM_DISABLE = $previousTqdmDisable
     }
 
-    $whisperExit = $whisperProcess.ExitCode
+    if ($whisperResult.Aborted) {
+      $abortedJobDir = Move-JobFolderToAborted -JobDir $JobDir
+      Write-Section "Stopped"
+      Write-Warn "Transcription was stopped by the user."
+      Write-Info "The original media file was left unchanged."
+      Write-Info "Incomplete job folder: $abortedJobDir"
+      Write-TranscriptionState -Mode $RunMode -Stage "Stopped" -CurrentFile $SelectedInputFile.Name -CurrentIndex $CurrentIndex -TotalFiles $TotalFiles -JobDir $abortedJobDir
+
+      return [pscustomobject]@{
+        FileName = $SelectedInputFile.Name
+        JobDir   = $abortedJobDir
+        ExitCode = 2
+        Success  = $false
+        Aborted  = $true
+        Message  = "Stopped by user"
+      }
+    }
+
+    $whisperExit = $whisperResult.ExitCode
   } catch {
     if ($null -eq $previousTqdmDisable) {
       Remove-Item Env:\TQDM_DISABLE -ErrorAction SilentlyContinue
@@ -759,6 +997,7 @@ function Invoke-TranscriptionFile {
       JobDir   = $JobDir
       ExitCode = 1
       Success  = $false
+      Aborted  = $false
       Message  = "Whisper could not be started: $($_.Exception.Message)"
     }
   }
@@ -817,11 +1056,14 @@ function Invoke-TranscriptionFile {
     Start-Process explorer.exe "$JobDir"
   }
 
+  Write-TranscriptionState -Mode $RunMode -Stage "Completed" -CurrentFile $SelectedInputFile.Name -CurrentIndex $CurrentIndex -TotalFiles $TotalFiles -JobDir $JobDir
+
   return [pscustomobject]@{
     FileName = $SelectedInputFile.Name
     JobDir   = $JobDir
     ExitCode = if ($whisperExit -eq 0 -and $missingOutputs.Count -gt 0) { 1 } else { $whisperExit }
     Success  = ($whisperExit -eq 0 -and $missingOutputs.Count -eq 0)
+    Aborted  = $false
     Message  = if ($missingOutputs.Count -gt 0) {
       "Missing expected output files: $($missingOutputs -join ', ')"
     } elseif ($whisperExit -ne 0) {
@@ -847,7 +1089,10 @@ if ($SingleFileParameterMode) {
     -WhisperModel $DefaultModel `
     -WhisperLanguage $DefaultLanguage `
     -WhisperTask $WhisperTask `
-    -OpenFolderWhenDone:$false
+    -OpenFolderWhenDone:$false `
+    -CurrentIndex 1 `
+    -TotalFiles 1 `
+    -RunMode "Single"
 
   exit $result.ExitCode
 }
@@ -902,12 +1147,20 @@ if ($BatchParameterMode) {
   }
 
   $results = @()
+  $batchStopped = $false
 
   for ($i = 0; $i -lt $selectedFiles.Count; $i++) {
+    if (Test-StopRequested) {
+      $batchStopped = $true
+      Write-Warn "Batch stop was requested before the next file began."
+      break
+    }
+
     $currentFile = $selectedFiles[$i]
 
     Write-Section "Batch Item $($i + 1) of $($selectedFiles.Count)"
     Write-Info "File: $($currentFile.Name)"
+    Write-TranscriptionState -Mode "Batch" -Stage "StartingFile" -CurrentFile $currentFile.Name -CurrentIndex ($i + 1) -TotalFiles $selectedFiles.Count -JobDir ""
 
     $result = Invoke-TranscriptionFile `
       -SelectedInputFile $currentFile `
@@ -915,15 +1168,27 @@ if ($BatchParameterMode) {
       -WhisperModel $DefaultModel `
       -WhisperLanguage $DefaultLanguage `
       -WhisperTask $WhisperTask `
-      -OpenFolderWhenDone:$false
+      -OpenFolderWhenDone:$false `
+      -CurrentIndex ($i + 1) `
+      -TotalFiles $selectedFiles.Count `
+      -RunMode "Batch"
 
     $results += $result
+
+    if ($result.Aborted) {
+      $batchStopped = $true
+      break
+    }
+
+    Write-TranscriptionState -Mode "Batch" -Stage "BetweenFiles" -CurrentFile "" -CurrentIndex ($i + 1) -TotalFiles $selectedFiles.Count -JobDir ""
   }
 
   Write-Section "Batch Summary"
 
   foreach ($result in $results) {
-    if ($result.Success) {
+    if ($result.Aborted) {
+      Write-Warn "$($result.FileName) - Stopped by user"
+    } elseif ($result.Success) {
       Write-Ok "$($result.FileName)"
     } else {
       Write-Warn "$($result.FileName) - $($result.Message)"
@@ -931,19 +1196,38 @@ if ($BatchParameterMode) {
   }
 
   $successCount = @($results | Where-Object { $_.Success }).Count
-  $failureCount = $results.Count - $successCount
+  $stoppedCount = @($results | Where-Object { $_.Aborted }).Count
+  $failureCount = @($results | Where-Object { -not $_.Success -and -not $_.Aborted }).Count
+  $notStartedCount = $selectedFiles.Count - $results.Count
 
   Write-Host ""
-  Write-Info "Successful: $successCount"
 
-  if ($failureCount -gt 0) {
-    Write-Warn "Failed: $failureCount"
+  if ($batchStopped) {
+    Write-Warn "Batch stopped by user."
+    Write-Info "Files found: $($selectedFiles.Count)"
+    Write-Info "Completed: $successCount"
+    Write-Info "Failed: $failureCount"
+    Write-Info "Stopped: $stoppedCount"
+    Write-Info "Not started: $notStartedCount"
+    Write-TranscriptionState -Mode "Batch" -Stage "Stopped" -CurrentFile "" -CurrentIndex $results.Count -TotalFiles $selectedFiles.Count -JobDir ""
   } else {
-    Write-Info "Failed: 0"
+    Write-Info "Successful: $successCount"
+
+    if ($failureCount -gt 0) {
+      Write-Warn "Failed: $failureCount"
+    } else {
+      Write-Info "Failed: 0"
+    }
+
+    Write-TranscriptionState -Mode "Batch" -Stage "Completed" -CurrentFile "" -CurrentIndex $selectedFiles.Count -TotalFiles $selectedFiles.Count -JobDir ""
   }
 
   Write-Host "Output folder:"
   Write-Host "  $OutputDir"
+
+  if ($batchStopped) {
+    exit 2
+  }
 
   if ($failureCount -gt 0) {
     exit 1

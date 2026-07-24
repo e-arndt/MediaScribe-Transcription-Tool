@@ -87,6 +87,7 @@ $colorButtonText = [System.Drawing.Color]::FromArgb(25, 38, 40)
 $colorButtonBorder = [System.Drawing.Color]::FromArgb(90, 110, 112)
 
 # Primary Start button
+$colorStopRed = $colorGroupText
 $colorStartGreen = [System.Drawing.Color]::FromArgb(0, 128, 64)
 $colorStartGreenHover = [System.Drawing.Color]::FromArgb(0, 112, 57)
 $colorStartGreenDown = [System.Drawing.Color]::FromArgb(0, 95, 49)
@@ -270,6 +271,37 @@ function Add-Status {
     $statusBox.ScrollToCaret()
 }
 
+function Update-StopButtonAppearance {
+    if ($null -eq $stopButton) {
+        return
+    }
+
+    if ($script:IsRunning -and -not $script:StopRequested) {
+        $stopButton.Enabled = $true
+        $stopButton.Text = "Stop Transcription"
+        $stopButton.UseVisualStyleBackColor = $false
+        $stopButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+        $stopButton.BackColor = $colorStopRed
+        $stopButton.ForeColor = [System.Drawing.Color]::White
+        $stopButton.FlatAppearance.BorderSize = 1
+        $stopButton.FlatAppearance.BorderColor = $colorStopRed
+        $stopButton.FlatAppearance.MouseOverBackColor = $colorStopRed
+        $stopButton.FlatAppearance.MouseDownBackColor = $colorStopRed
+    } elseif ($script:IsRunning -and $script:StopRequested) {
+        $stopButton.Enabled = $false
+        $stopButton.Text = "Stopping..."
+        $stopButton.BackColor = $colorButtonBackground
+        $stopButton.ForeColor = $colorButtonText
+        $stopButton.FlatAppearance.BorderColor = $colorButtonBorder
+    } else {
+        $stopButton.Enabled = $false
+        $stopButton.Text = "Stop Transcription"
+        $stopButton.BackColor = $colorButtonBackground
+        $stopButton.ForeColor = $colorButtonText
+        $stopButton.FlatAppearance.BorderColor = $colorButtonBorder
+    }
+}
+
 function Set-RunningState {
     param([bool]$IsRunning)
 
@@ -292,9 +324,12 @@ function Set-RunningState {
     if ($IsRunning) {
         $statusLabel.Text = "Status: Running"
     } else {
+        $script:StopRequested = $false
         Update-FileSelectionMode
         $statusLabel.Text = "Status: Ready"
     }
+
+    Update-StopButtonAppearance
 }
 
 # -----------------------------
@@ -521,10 +556,18 @@ $startButton.ForeColor = [System.Drawing.Color]::White
 $startButton.FlatStyle = "Flat"
 $form.Controls.Add($startButton)
 
+$stopButton = New-Object System.Windows.Forms.Button
+$stopButton.Text = "Stop Transcription"
+$stopButton.Font = $fontButtonBold
+$stopButton.Location = New-Object System.Drawing.Point(260, 460)
+$stopButton.Size = New-Object System.Drawing.Size(175, 42)
+$stopButton.Enabled = $false
+$form.Controls.Add($stopButton)
+
 $openOutputButton = New-Object System.Windows.Forms.Button
 $openOutputButton.Text = "Open Output Folder"
 $openOutputButton.Font = $fontButton
-$openOutputButton.Location = New-Object System.Drawing.Point(350, 465)
+$openOutputButton.Location = New-Object System.Drawing.Point(445, 465)
 $openOutputButton.Size = New-Object System.Drawing.Size(175, 34)
 $form.Controls.Add($openOutputButton)
 
@@ -653,15 +696,94 @@ $startButton.FlatAppearance.BorderColor = $colorStartGreenDown
 $startButton.FlatAppearance.MouseOverBackColor = $colorStartGreenHover
 $startButton.FlatAppearance.MouseDownBackColor = $colorStartGreenDown
 
+# Stop button is neutral while disabled and red only while active.
+$stopButton.UseVisualStyleBackColor = $false
+$stopButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$stopButton.BackColor = $colorButtonBackground
+$stopButton.ForeColor = $colorButtonText
+$stopButton.FlatAppearance.BorderSize = 1
+$stopButton.FlatAppearance.BorderColor = $colorButtonBorder
+
 
 # -----------------------------
 # Events
 # -----------------------------
 
 $script:IsRunning = $false
+$script:StopRequested = $false
+$script:StopRequestedAt = $null
 $script:RunningProcess = $null
 $script:CurrentLogFile = $null
+$script:StopRequestFile = $null
+$script:StateFile = $null
 $script:LastLogLength = 0
+$script:ForcedStopTimeoutSeconds = 20
+
+function Stop-GuiBackendProcessTree {
+    if ($null -eq $script:RunningProcess) {
+        return
+    }
+
+    try {
+        if (-not $script:RunningProcess.HasExited) {
+            & taskkill.exe /PID $script:RunningProcess.Id /T /F 2>$null | Out-Null
+        }
+    } catch {
+        try {
+            $script:RunningProcess.Kill()
+        } catch {
+            # The process may already have exited.
+        }
+    }
+}
+
+function Move-GuiRecordedJobToAborted {
+    if ([string]::IsNullOrWhiteSpace($script:StateFile) -or -not (Test-Path -LiteralPath $script:StateFile)) {
+        return
+    }
+
+    try {
+        $state = Get-Content -LiteralPath $script:StateFile -Raw | ConvertFrom-Json
+        $jobDir = [string]$state.JobDir
+
+        if ([string]::IsNullOrWhiteSpace($jobDir) -or -not (Test-Path -LiteralPath $jobDir -PathType Container)) {
+            return
+        }
+
+        $currentName = Split-Path -Leaf $jobDir
+        if ($currentName.StartsWith("ABORTED_", [System.StringComparison]::OrdinalIgnoreCase)) {
+            return
+        }
+
+        $parentFolder = Split-Path -Parent $jobDir
+        $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
+        $abortedPath = Join-Path $parentFolder ("ABORTED_{0}_{1}" -f $currentName, $stamp)
+        $counter = 1
+
+        while (Test-Path -LiteralPath $abortedPath) {
+            $abortedPath = Join-Path $parentFolder ("ABORTED_{0}_{1}_{2}" -f $currentName, $stamp, $counter)
+            $counter++
+        }
+
+        Move-Item -LiteralPath $jobDir -Destination $abortedPath -ErrorAction Stop
+        Add-Status "Incomplete job folder: $abortedPath"
+    } catch {
+        Add-Status "The incomplete job folder could not be renamed automatically after forced shutdown."
+    }
+}
+
+function Remove-RunControlFiles {
+    foreach ($path in @($script:StopRequestFile, $script:StateFile)) {
+        if (-not [string]::IsNullOrWhiteSpace($path)) {
+            Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath ("$path.tmp") -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    $script:StopRequestFile = $null
+    $script:StateFile = $null
+    $script:StopRequestedAt = $null
+}
 
 $logTimer = New-Object System.Windows.Forms.Timer
 $logTimer.Interval = 1000
@@ -701,10 +823,28 @@ $logTimer.Add_Tick({
         }
     }
 
+    if ($script:StopRequested -and $null -ne $script:StopRequestedAt -and $null -ne $script:RunningProcess) {
+        try {
+            if (-not $script:RunningProcess.HasExited) {
+                $elapsed = (Get-Date) - $script:StopRequestedAt
+                if ($elapsed.TotalSeconds -ge $script:ForcedStopTimeoutSeconds) {
+                    Add-Status "Stop is taking longer than expected. Forcing the transcription process to close..."
+                    Stop-GuiBackendProcessTree
+                    Start-Sleep -Milliseconds 500
+                    Move-GuiRecordedJobToAborted
+                    $script:StopRequestedAt = $null
+                }
+            }
+        } catch {
+            # The normal exit handler below will finish GUI cleanup.
+        }
+    }
+
     if ($null -ne $script:RunningProcess) {
     try {
         if ($script:RunningProcess.HasExited) {
             $exitCode = $script:RunningProcess.ExitCode
+            $wasStopRequested = $script:StopRequested
 
             $logTimer.Stop()
 
@@ -722,10 +862,13 @@ $logTimer.Add_Tick({
             # can change the status label.
             if ($exitCode -eq 0) {
                 $statusLabel.Text = "Status: Complete"
+            } elseif ($exitCode -eq 2 -or $wasStopRequested) {
+                $statusLabel.Text = "Status: Stopped"
             } else {
                 $statusLabel.Text = "Status: Finished with errors"
             }
 
+            Remove-RunControlFiles
             $script:RunningProcess.Dispose()
             $script:RunningProcess = $null
         }
@@ -734,6 +877,7 @@ $logTimer.Add_Tick({
         Add-Status ""
         Add-Status "MediaScribe process ended, but status could not be read."
         Set-RunningState -IsRunning $false
+        Remove-RunControlFiles
         $script:RunningProcess = $null
     }
 }
@@ -780,6 +924,47 @@ $clearStatusButton.Add_Click({
 
 $closeButton.Add_Click({
     $form.Close()
+})
+
+$stopButton.Add_Click({
+    if (-not $script:IsRunning -or $null -eq $script:RunningProcess) {
+        return
+    }
+
+    $message = "MediaScribe is still working on this file.`n`nIf you stop now, MediaScribe will not create a finished transcript.`n`nDo you want to stop transcription?"
+    $choice = [System.Windows.Forms.MessageBox]::Show(
+        $message,
+        "Stop Transcription",
+        [System.Windows.Forms.MessageBoxButtons]::YesNo,
+        [System.Windows.Forms.MessageBoxIcon]::Warning,
+        [System.Windows.Forms.MessageBoxDefaultButton]::Button2
+    )
+
+    if ($choice -ne [System.Windows.Forms.DialogResult]::Yes) {
+        return
+    }
+
+    try {
+        $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+        [System.IO.File]::WriteAllText($script:StopRequestFile, "stop", $utf8NoBom)
+        $script:StopRequested = $true
+        $script:StopRequestedAt = Get-Date
+        $statusLabel.Text = "Status: Stopping"
+        Add-Status ""
+        if ($allFilesRadioButton.Checked) {
+            Add-Status "Stop requested. MediaScribe is stopping the active transcription and cancelling the remaining batch."
+        } else {
+            Add-Status "Stop requested. MediaScribe is stopping the active transcription."
+        }
+        Update-StopButtonAppearance
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show(
+            "MediaScribe could not create the stop request.`n`n$($_.Exception.Message)",
+            "Stop Transcription",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Error
+        ) | Out-Null
+    }
 })
 
 $startButton.Add_Click({
@@ -884,8 +1069,16 @@ $startButton.Add_Click({
 
     Set-RunningState -IsRunning $true
 
-    $script:CurrentLogFile = Join-Path $env:TEMP ("MediaScribe-GUI-" + [guid]::NewGuid().ToString() + ".log")
+    $runId = [guid]::NewGuid().ToString()
+    $script:CurrentLogFile = Join-Path $env:TEMP ("MediaScribe-GUI-" + $runId + ".log")
+    $script:StopRequestFile = Join-Path $env:TEMP ("MediaScribe-" + $runId + ".stop")
+    $script:StateFile = Join-Path $env:TEMP ("MediaScribe-" + $runId + ".state.json")
+    $script:StopRequested = $false
+    $script:StopRequestedAt = $null
     $script:LastLogLength = 0
+
+    Remove-Item -LiteralPath $script:StopRequestFile -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $script:StateFile -Force -ErrorAction SilentlyContinue
 
     $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
     [System.IO.File]::WriteAllText($script:CurrentLogFile, "", $utf8NoBom)
@@ -908,7 +1101,9 @@ $startButton.Add_Click({
         "-OutputMode", $selectedOutputMode,
         "-Model", $selectedModel,
         "-Language", $selectedLanguage,
-        "-Task", $selectedTask
+        "-Task", $selectedTask,
+        "-StopRequestFile", "`"$($script:StopRequestFile)`"",
+        "-StateFile", "`"$($script:StateFile)`""
     )
 
     $arguments = $arguments -join " "
@@ -977,6 +1172,7 @@ $startButton.Add_Click({
         Add-Status "Failed to start transcription."
         Add-Status $_.Exception.Message
         Set-RunningState -IsRunning $false
+        Remove-RunControlFiles
         $script:RunningProcess = $null
         $logTimer.Stop()
     }
@@ -985,7 +1181,7 @@ $startButton.Add_Click({
 $form.Add_FormClosing({
     if ($null -ne $script:RunningProcess -and -not $script:RunningProcess.HasExited) {
         [System.Windows.Forms.MessageBox]::Show(
-            "MediaScribe is still transcribing.`n`nPlease wait for the transcription to finish before closing MediaScribe.",
+            "MediaScribe is still transcribing.`n`nUse Stop Transcription first, or wait for the transcription to finish before closing MediaScribe.",
             "Transcription Still Running",
             [System.Windows.Forms.MessageBoxButtons]::OK,
             [System.Windows.Forms.MessageBoxIcon]::Warning
@@ -1007,5 +1203,6 @@ Add-Status "Input folder: $InputDir"
 Add-Status "Output folder: $OutputDir"
 
 Update-FileList -FolderPath $script:SourceFolder
+Update-StopButtonAppearance
 
 [void]$form.ShowDialog()
