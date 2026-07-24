@@ -2,10 +2,10 @@ MediaScribe - Quick Start / How to Use
 
 MediaScribe creates transcripts and optional caption files from audio and video files.
 
-It can be used with:
+It includes:
 
 1. The MediaScribe GUI - recommended for most users
-2. The MediaScribe Terminal version - useful as a fallback or for troubleshooting
+2. The MediaScribe Terminal version - useful for advanced users, fallback, development, and troubleshooting
 
 MediaScribe is especially useful after old family recordings have been digitized, such as VHS, VHS-C, 8mm film, Super 8 film, Video8, Hi8, audio cassette, reel-to-reel recordings, talks, interviews, family stories, lessons, meetings, and other spoken audio/video files.
 
@@ -17,11 +17,11 @@ Open the folder where you downloaded, extracted, or copied MediaScribe.
 
 This might be a USB drive, Downloads folder, Desktop folder, project folder, or extracted ZIP folder.
 
-In that folder, double-click:
+Double-click:
 
 Install.bat
 
-The installer will start PowerShell and run setup.ps1 for you.
+The installer starts PowerShell and runs setup.ps1.
 
 During setup, choose where to install MediaScribe.
 
@@ -29,7 +29,7 @@ The default install folder is usually:
 
 Documents\MediaScribe
 
-Setup will create the installed MediaScribe folder and these subfolders:
+Setup creates the installed MediaScribe folder and these subfolders:
 
 Input
 Output
@@ -37,13 +37,13 @@ Logs
 Models
 Tools
 
-Setup will also create launchers for using MediaScribe.
+Setup also creates launchers for the GUI and Terminal versions.
 
 The main GUI launcher is:
 
 Start-MediaScribe-GUI.bat
 
-The terminal launcher is:
+The Terminal launcher may be:
 
 MediaScribe.bat
 
@@ -51,9 +51,9 @@ or:
 
 Start-MediaScribe.bat
 
-The exact launcher names may vary slightly depending on the package version, but the GUI launcher is the recommended choice for most users.
+The exact launcher names may vary slightly by package version.
 
-If setup completes successfully and all required dependencies are available, the installer may offer launch options such as:
+If setup completes successfully, it may offer choices such as:
 
 [1] Start MediaScribe GUI
 [2] Start MediaScribe Terminal
@@ -63,14 +63,14 @@ If setup completes successfully and all required dependencies are available, the
 Choose the GUI for normal use.
 
 ============================================================
-2. REINSTALLING OR REPAIRING MEDIASCRIBE
+2. REINSTALL OR REPAIR MEDIASCRIBE
 ============================================================
 
-You can run Install.bat again to reinstall or repair MediaScribe.
+Run Install.bat again to reinstall or repair MediaScribe.
 
-This is useful if core app files were damaged, deleted, or need to be updated.
+This is useful when core app files were damaged, deleted, or updated.
 
-During reinstall or repair, setup may replace the core app files, including:
+Setup may replace core files such as:
 
 transcribe.ps1
 MediaScribe-GUI.ps1
@@ -82,7 +82,7 @@ config.json
 
 Setup recreates required folders if they are missing.
 
-Setup does not clear or delete files inside these folders:
+Setup does not clear or delete files inside:
 
 Input
 Output
@@ -90,9 +90,9 @@ Logs
 Models
 Tools
 
-This means existing media files, transcripts, WAV files, caption files, and logs should remain in place.
+Existing media files, transcripts, WAV files, captions, logs, and models should remain in place.
 
-To remove MediaScribe, delete the installed MediaScribe folder.
+To uninstall MediaScribe, delete the installed MediaScribe folder.
 
 ============================================================
 3. DEPENDENCIES
@@ -105,61 +105,59 @@ pip
 OpenAI Whisper
 FFmpeg
 
-The setup script checks for these dependencies.
+The setup script checks these dependencies.
 
-FFmpeg may be bundled with MediaScribe in:
+FFmpeg may be bundled in:
 
 Dependencies\FFmpeg
 
-During setup, bundled FFmpeg is copied into the installed app folder here:
+During setup, bundled FFmpeg is copied to:
 
 Tools\ffmpeg
 
 MediaScribe looks for FFmpeg in this order:
 
 1. Local Tools\ffmpeg\ffmpeg.exe
-2. System FFmpeg from PATH
+2. System FFmpeg available through PATH
 
-Python may be bundled with MediaScribe in:
+Python may be bundled in:
 
 Dependencies\Python
 
 If Python is missing, setup can offer to run the bundled Python installer.
 
-pip is handled through Python. If pip is missing, setup can try to repair it using Python's ensurepip feature.
+If pip is missing, setup can try to repair it using Python's ensurepip feature.
 
-OpenAI Whisper is installed with pip if it is missing.
+OpenAI Whisper is installed with pip when it is missing.
 
 Installing Whisper requires internet access.
 
 MediaScribe looks for Whisper in this order:
 
 1. python -m whisper
-2. Global whisper.exe / whisper command
+2. Global whisper.exe or whisper command
 
-If setup says a dependency is missing, MediaScribe files may still be installed, but transcription will not work until the missing dependency is installed or fixed.
+If setup reports a missing dependency, MediaScribe files may still be installed, but transcription will not work until the dependency is installed or repaired.
 
-After fixing missing dependencies or internet access, run Install.bat again to re-check setup.
+After fixing the dependency or internet connection, run Install.bat again.
 
 ============================================================
-4. USE MEDIASCRIBE GUI
+4. START THE MEDIASCRIBE GUI
 ============================================================
 
-After setup finishes, choose the GUI launch option if offered.
-
-To use MediaScribe later, open the installed MediaScribe folder.
+Open the installed MediaScribe folder.
 
 Example:
 
 Documents\MediaScribe
 
-Then double-click:
+Double-click:
 
 Start-MediaScribe-GUI.bat
 
 The GUI is recommended for most users.
 
-When the GUI opens, it shows:
+The GUI includes:
 
 Files
 Files to transcribe
@@ -171,27 +169,43 @@ Open Output Folder
 Clear Status Window
 Close MediaScribe
 
-A minimized PowerShell support window may also appear on the taskbar.
+The Status section expands when the window is enlarged. The upper controls remain in their normal positions, and the Close button stays centered near the bottom.
+
+============================================================
+5. SUPPORT WINDOW AND SINGLE-INSTANCE PROTECTION
+============================================================
+
+A minimized PowerShell support window may appear on the taskbar.
 
 Its title may say:
 
 DO NOT CLOSE - MediaScribe Support Window
 
-Do not close the support window while MediaScribe is running.
+Do not close this support window while MediaScribe is running.
 
-Close MediaScribe from the GUI when you are finished.
+Close MediaScribe from the GUI when finished.
+
+Only one MediaScribe GUI instance can run at a time in the current Windows logon session.
+
+If you try to start another GUI instance, MediaScribe displays:
+
+MediaScribe is already running.
+
+Check the taskbar for the open MediaScribe window.
+
+The duplicate GUI instance then exits.
+
+The Terminal version remains separately available for advanced use and troubleshooting.
 
 ============================================================
-5. CHOOSE A SOURCE FOLDER
+6. CHOOSE A SOURCE FOLDER
 ============================================================
 
 The GUI uses a Source folder.
 
 By default, the Source folder is the MediaScribe Input folder.
 
-You can put audio/video files into the Input folder before starting MediaScribe.
-
-You can also use:
+Place audio/video files in Input before starting MediaScribe, or use:
 
 Browse Folder
 
@@ -207,7 +221,7 @@ Use:
 
 Open Source Folder
 
-to open the current Source folder in File Explorer.
+to open the Source folder in File Explorer.
 
 Recognized video files:
 
@@ -218,10 +232,8 @@ Recognized audio files:
 MP3, M4A, WAV, AAC, FLAC, OGG, OPUS, WMA
 
 ============================================================
-6. CHOOSE ONE FILE OR ALL FILES
+7. CHOOSE ONE FILE OR ALL FILES
 ============================================================
-
-The GUI can process either one selected file or all recognized files in the current Source folder.
 
 Under Files to transcribe, choose:
 
@@ -235,32 +247,37 @@ All files in source folder
 Selected file
 ------------------------------------------------------------
 
-Use Selected file when you want to process only one recording.
+Use Selected file to process one recording.
 
 Choose the recording from the Selected file dropdown.
 
-This remains the default behavior.
+This is the default mode.
 
 ------------------------------------------------------------
 All files in source folder
 ------------------------------------------------------------
 
-Use All files in source folder when you want MediaScribe to process every recognized audio/video file in the current Source folder.
+Use All files in source folder to process every recognized media file in the current Source folder.
 
-MediaScribe captures the file list and processes the files one at a time.
+MediaScribe captures the recognized file list and processes files one at a time.
 
-It does not run several Whisper jobs at the same time.
+It does not run several Whisper jobs at once.
 
-The same Output mode, Transcription mode, Input Audio, and Output Text settings are used for every file in the batch.
+The same settings are used for every file in the batch:
+
+Output mode
+Transcription mode
+Input Audio
+Output Text
 
 Each file receives its own output folder.
 
-If one file fails, MediaScribe should continue with the remaining files and report the results in the final batch summary.
+If one file fails, MediaScribe continues with the remaining files and reports the failure in the final batch summary.
 
-After the batch finishes, the file list refreshes to match the current Source folder.
+After the batch finishes or stops, the Source list refreshes.
 
 ============================================================
-7. TRANSCRIPTION SETTINGS IN THE GUI
+8. GUI TRANSCRIPTION SETTINGS
 ============================================================
 
 The GUI has four main settings.
@@ -271,29 +288,13 @@ Output mode
 
 Default - Original file, WAV audio, TXT transcript
 
-This is recommended for most users.
-
-Default mode creates:
-
-Original file
-WAV audio
-TXT transcript
+Default mode is recommended for most users.
 
 Full - Original file, WAV audio, TXT, SRT, VTT, TSV, JSON
 
 Use Full mode when you need caption/subtitle files or detailed Whisper output.
 
-Full mode creates:
-
-Original file
-WAV audio
-TXT transcript
-SRT subtitle file
-VTT subtitle file
-TSV timing file
-JSON Whisper output
-
-SRT and VTT files are useful for video captions/subtitles.
+SRT and VTT files are useful for video captions and subtitles.
 
 ------------------------------------------------------------
 Transcription mode
@@ -301,21 +302,17 @@ Transcription mode
 
 Fast - recommended
 
-This is recommended for most users.
-
-Fast uses the configured/default Whisper model.
+Fast uses the configured/default Whisper model, normally medium.
 
 Accurate - slower, for difficult audio
 
-Accurate uses the large Whisper model.
-
-It is slower, but may help when audio is harder to understand or Fast mode misses words.
+Accurate uses the large Whisper model. It may help with harder audio but requires more time and computer resources.
 
 ------------------------------------------------------------
 Input Audio
 ------------------------------------------------------------
 
-Input Audio means the language being spoken in the recording.
+Input Audio means the language spoken in the recording.
 
 Options include:
 
@@ -332,17 +329,9 @@ Spanish
 
 English is the default.
 
-Use Auto-detect if you are not sure what language is being spoken.
+Use Auto-detect when you do not know the spoken language or when a batch contains different languages.
 
-If you know the language, choosing it directly may give more consistent results.
-
-Important for multiple-file transcription:
-
-The selected Input Audio setting is applied to every file in the batch.
-
-Use Auto-detect when the folder contains recordings in different languages.
-
-Auto-detect evaluates each file independently.
+Auto-detect evaluates every file independently.
 
 Example mixed-language batch:
 
@@ -350,17 +339,15 @@ English recording -> detected as English
 Korean recording -> detected as Korean
 Spanish recording -> detected as Spanish
 
-If you select English instead of Auto-detect, Whisper is told to treat every file as English. A Korean or Spanish recording may then produce inaccurate or unusable text.
+Choosing English tells Whisper to treat every file as English. Non-English recordings may then produce inaccurate or unusable text.
 
 ------------------------------------------------------------
 Output Text
 ------------------------------------------------------------
 
-Output Text controls what kind of text MediaScribe creates.
-
 Same as input / detected
 
-This creates a transcript in the same language as the audio.
+Creates a transcript in the same language as the audio.
 
 Examples:
 
@@ -370,7 +357,7 @@ Auto-detect Korean audio -> Korean transcript
 
 English translation
 
-This asks Whisper to translate the spoken audio into English.
+Asks Whisper to translate the spoken audio into English.
 
 Examples:
 
@@ -378,34 +365,34 @@ Korean audio -> English text
 Spanish audio -> English text
 Auto-detect Korean audio -> English text
 
-Important:
+Whisper's built-in translation mode translates to English. MediaScribe does not currently translate into every possible output language.
 
-Whisper's built-in translation mode translates to English.
+Recommended mixed-language settings:
 
-MediaScribe does not currently translate into every possible output language.
-
-For a mixed-language batch:
+To keep each recording in its detected language:
 
 Input Audio: Auto-detect
 Output Text: Same as input / detected
 
-creates each transcript in its detected language.
+To create English text from each recording:
 
 Input Audio: Auto-detect
 Output Text: English translation
 
-detects each source language and creates English output.
-
 ============================================================
-8. LIVE PREVIEW BEHAVIOR
+9. LIVE TRANSCRIPT PREVIEW
 ============================================================
 
-For English transcription, MediaScribe can show live transcript preview lines while Whisper is working.
-
-Live preview is shown when:
+For English transcription, MediaScribe shows live transcript lines while Whisper is working when:
 
 Input Audio: English
 Output Text: Same as input / detected
+
+Whisper normally releases the preview in approximately 30-second audio chunks.
+
+This means several timestamped lines may appear together after each chunk is processed.
+
+This is normal and confirms that progress is being released while the transcription is still running.
 
 Live preview is hidden for:
 
@@ -417,18 +404,23 @@ This is intentional.
 
 Some languages use characters that may not display correctly in the Windows status window.
 
-When live preview is hidden, MediaScribe still creates the final transcript file.
+When preview is hidden, MediaScribe still creates the final transcript.
 
-The GUI may show messages such as:
+The GUI or Terminal may show messages such as:
 
 Live transcript preview is not shown for this language/output setting.
 Some characters may not display correctly in the Windows status window.
 English translation and non-English transcription still create the final transcript file.
 
-This is normal.
+Hidden-preview jobs may also create:
+
+whisper_stdout.log
+whisper_stderr.log
+
+These logs are normal.
 
 ============================================================
-9. START TRANSCRIPTION
+10. START TRANSCRIPTION
 ============================================================
 
 After choosing the file mode and settings, click:
@@ -439,78 +431,75 @@ When All files in source folder is selected, the button changes to:
 
 Start Batch Transcription
 
-For Selected file mode, MediaScribe processes the file shown in the Selected file dropdown.
+For every file, MediaScribe:
 
-For All files in source folder mode, MediaScribe processes all recognized files in the current Source folder one at a time.
-
-For each file, MediaScribe will:
-
-1. Create a separate output/job folder
-2. Extract WAV audio with FFmpeg
-3. Run OpenAI Whisper
-4. Create the selected transcript/output files
-5. Move or copy the original file according to MediaScribe's file handling rules
-6. Continue to the next file when using multiple-file mode
+1. Creates a separate output/job folder
+2. Extracts mono 16 kHz WAV audio with FFmpeg
+3. Runs OpenAI Whisper
+4. Creates the selected transcript/output files
+5. Verifies expected output
+6. Moves or copies the original according to the file-handling rules
+7. Continues to the next file in batch mode
 
 Long recordings may take several minutes or more.
 
 Accurate mode is slower than Fast mode.
 
-Do not close MediaScribe or its PowerShell support window while transcription is active.
+Do not close the GUI or its PowerShell support window during transcription.
 
-Use Stop Transcription when you need to cancel the active operation safely.
+Use Stop Transcription when you need to cancel safely.
 
 ============================================================
-10. STOP TRANSCRIPTION
+11. STOP TRANSCRIPTION IN THE GUI
 ============================================================
 
-Stop Transcription safely cancels the active GUI transcription.
+The Stop button is disabled while MediaScribe is idle.
 
-The Stop button is disabled and uses its normal inactive appearance while MediaScribe is idle.
-
-While transcription is running, the Stop button becomes active and uses the same red color as the MediaScribe section titles.
+During transcription, Stop becomes active and uses the same red attention color as the MediaScribe section titles.
 
 To stop:
 
 1. Click Stop Transcription
-2. Read the confirmation message
-3. Choose Yes only when you want to cancel the active operation
+2. Read the confirmation
+3. Choose Yes only when you want to stop
 
-The safe/default confirmation choice is No, Keep Running.
+The safe/default choice is:
+
+No, Keep Running
 
 After Stop is confirmed, the button changes to:
 
 Stopping...
 
-MediaScribe then stops the active FFmpeg, Python, and Whisper process tree and returns the GUI to a usable idle state.
+MediaScribe stops the active FFmpeg, Python, and Whisper process tree and returns the GUI to an idle state.
 
 ------------------------------------------------------------
 Stopping one selected file
 ------------------------------------------------------------
 
-In Selected file mode, Stop cancels only the active transcription.
+The active transcription is stopped.
 
 The original source media remains unchanged.
 
-The incomplete output/job folder is renamed with an ABORTED_ prefix.
+The incomplete output/job folder is renamed with an ABORTED_ prefix and timestamp.
 
 Example:
 
 Output\ABORTED_Family Interview_20260723_205808
 
 ------------------------------------------------------------
-Stopping a multiple-file batch
+Stopping a batch
 ------------------------------------------------------------
 
-In All files in source folder mode, Stop cancels the entire active batch.
+Stop cancels the entire active batch.
 
 Completed files remain completed.
 
-The active file is stopped and its incomplete job folder is renamed with ABORTED_.
+The active file is stopped and its incomplete job folder becomes ABORTED_.
 
 Files that have not started remain untouched in the Source folder.
 
-The stopped-batch summary reports:
+The summary reports:
 
 Files found
 Completed
@@ -518,47 +507,31 @@ Failed
 Stopped
 Not started
 
-The user can remove unwanted source files, review or delete ABORTED_ folders, and restart the folder-wide batch.
-
-------------------------------------------------------------
-ABORTED_ folders
-------------------------------------------------------------
-
-An ABORTED_ folder identifies an incomplete job.
-
-It may contain useful partial files, such as:
-
-WAV audio
-Whisper logs
-Partial output files
-
-The original source media is not renamed or moved when the active transcription is stopped.
-
-ABORTED_ folders may be reviewed, retained, or deleted by the user, library staff, or a Family History Center technician.
+A stopped job is a warning/attention condition, not a processing failure.
 
 Closing MediaScribe remains blocked while transcription is active.
 
-Use Stop Transcription first, then close MediaScribe after it returns to an idle state.
+Use Stop first, then close MediaScribe after it returns to idle.
 
 ============================================================
-11. FIND RESULTS
+12. FIND RESULTS
 ============================================================
 
-Results are saved in the Output folder.
+Results are saved in Output.
 
-Each file gets its own output folder.
+Each file receives its own output folder.
 
 Example:
 
 Output\My Recording
 
-In Default mode, the job folder contains:
+Default mode normally contains:
 
 My Recording.mp4
 My Recording.wav
 My Recording.txt
 
-In Full mode, the job folder may contain:
+Full mode may contain:
 
 My Recording.mp4
 My Recording.wav
@@ -568,84 +541,70 @@ My Recording.vtt
 My Recording.tsv
 My Recording.json
 
-For Auto-detect, non-English, or English translation jobs, the folder may also contain:
+Hidden-preview jobs may also contain:
 
 whisper_stdout.log
 whisper_stderr.log
 
-These log files are normal.
+If a folder with the same name already exists, MediaScribe creates a timestamped sibling folder instead of overwriting the existing job.
 
-They keep Whisper's progress/debug output out of the GUI status window.
-
-If an output folder with the same name already exists, MediaScribe creates a timestamped sibling folder instead of overwriting the existing job.
-
-If a transcription is stopped, the incomplete job folder is renamed with an ABORTED_ prefix.
+If a transcription is stopped, the incomplete folder receives an ABORTED_ prefix.
 
 ============================================================
-12. MULTIPLE-FILE RESULTS
+13. FILE HANDLING AND SAFETY
 ============================================================
 
-In multiple-file mode, every recording receives its own output folder.
-
-Example Source folder:
-
-Family Interview.mp4
-Korean Story.mp3
-Grandpa Tape.wav
-
-Example Output folder:
-
-Output\Family Interview
-Output\Korean Story
-Output\Grandpa Tape
-
-MediaScribe processes the files sequentially.
-
-A completed file remains completed before the next file begins.
-
-At the end, MediaScribe displays a batch summary showing which files completed and which files failed.
-
-If the user stops a batch, the summary also reports the stopped file and the number of files that did not start.
-
-After the batch finishes, the GUI refreshes the current Source folder list.
-
-Files successfully moved from the MediaScribe Input folder disappear from the list.
-
-External files normally remain listed because their originals remain in the external Source folder.
-
-============================================================
-13. FILE HANDLING
-============================================================
-
-Files placed inside the MediaScribe Input folder are moved into their output/job folder only after successful processing.
+Files inside the MediaScribe Input folder are moved into their output folder only after successful processing and expected output verification.
 
 External files selected from another folder are left in place by default.
 
-This behavior helps preserve original media while keeping completed jobs organized.
+The original is never moved before the expected transcript output is created.
 
-The original file is moved only after the expected transcript output is created.
+For every file:
 
-If transcription fails, the original file remains in place.
+Successful Input-folder file -> moved into completed job folder
+Failed Input-folder file -> remains in Input
+Stopped active file -> remains in Source/Input
+Unstarted batch file -> remains untouched
+External source file -> remains in its external folder by default
 
-During multiple-file transcription, these rules are applied separately to every file.
-
-A successful Input-folder file is moved after that file succeeds.
-
-A failed Input-folder file remains in the Input folder.
-
-An external source file remains in its external folder by default.
-
-When Stop Transcription is used, the active original media remains in place and the incomplete job folder is marked with ABORTED_.
+These rules are applied separately to every file in a batch.
 
 ============================================================
-14. USE MEDIASCRIBE TERMINAL VERSION
+14. FAILURES AND INCOMPLETE FOLDERS
+============================================================
+
+DRM-protected, unsupported, damaged, or incorrectly named files may fail.
+
+A failed file is reported as a failure, not as stopped.
+
+In a batch, MediaScribe continues to later files after an individual failure.
+
+The original failed source remains in place.
+
+When FFmpeg fails before creating anything useful, MediaScribe removes the empty failed job folder automatically.
+
+MediaScribe does not delete a failed folder when it contains useful or diagnostic content, such as:
+
+Partial WAV audio
+Whisper logs
+Transcript fragments
+Other output files
+Hidden files
+
+ABORTED_ folders are used only for user-requested Stop operations.
+
+An ABORTED_ folder may contain useful incomplete work and can be reviewed, retained, or deleted.
+
+============================================================
+15. USE THE TERMINAL VERSION
 ============================================================
 
 The GUI is recommended for most users.
 
-The terminal version is still available as a fallback.
+The Terminal version is available for advanced users, development, fallback, and troubleshooting.
 
-To use the terminal version, open the installed MediaScribe folder and double-click:
+Open the installed MediaScribe folder and double-click:
 
 MediaScribe.bat
 
@@ -653,23 +612,11 @@ or:
 
 Start-MediaScribe.bat
 
-The terminal version shows a welcome screen, then lets you choose files from the Input folder.
-
-When MediaScribe starts, it shows:
-
-What MediaScribe does
-Default output information
-Full output information
-Recognized video formats
-Recognized audio formats
-Input folder location
-Output folder location
+The Terminal version displays a welcome screen and the Input/Output locations.
 
 Press Enter to continue.
 
-MediaScribe will show a list of recognized files.
-
-Example:
+When recognized files are found, it displays a menu such as:
 
 [1] First file.mp4
 [2] Second file.mp3
@@ -678,11 +625,11 @@ Example:
 
 Choose a file number to process one file.
 
-Choose B to process all files.
+Choose B to process all recognized files.
 
 Choose Q to quit.
 
-If no files are found, you can add files to the Input folder and choose Refresh.
+If no files are found:
 
 [R] Refresh / check again
 [O] Open Input folder
@@ -691,38 +638,130 @@ If no files are found, you can add files to the Input folder and choose Refresh.
 Pressing Enter refreshes.
 
 ============================================================
-15. TERMINAL OUTPUT MODES
+16. TERMINAL SETTINGS
 ============================================================
 
-The terminal version asks what output files you want.
+The Terminal version asks for the same major processing choices as the GUI.
+
+------------------------------------------------------------
+Output mode
+------------------------------------------------------------
 
 [D] Default - Original file, WAV audio, TXT transcript
 [F] Full    - Original file, WAV audio, TXT, SRT, VTT, TSV, JSON
 
-Default mode is recommended for most users.
-
-Use Full mode when you need caption/subtitle files or detailed Whisper output.
-
-============================================================
-16. TERMINAL TRANSCRIPTION MODES
-============================================================
-
-The terminal version asks which transcription mode to use.
+------------------------------------------------------------
+Transcription mode
+------------------------------------------------------------
 
 [F] Fast     - Uses the configured/default Whisper model
 [A] Accurate - Uses the large Whisper model
 
-Pressing Enter uses Fast mode.
+------------------------------------------------------------
+Input Audio
+------------------------------------------------------------
 
-Fast mode is recommended for most users.
+[E] English
+[A] Auto-detect
+[C] Chinese
+[F] French
+[G] German
+[I] Italian
+[J] Japanese
+[K] Korean
+[P] Portuguese
+[S] Spanish
 
-Accurate mode is slower and may help when audio is harder to understand or Fast mode misses words.
+Use Auto-detect for mixed-language batches.
+
+------------------------------------------------------------
+Output Text
+------------------------------------------------------------
+
+[S] Same as input / detected
+[E] English translation
+
+The selected settings apply to every file in a Terminal batch.
 
 ============================================================
-17. AFTER PROCESSING
+17. STOP TRANSCRIPTION IN THE TERMINAL
 ============================================================
 
-After processing finishes, MediaScribe may ask what to do next.
+While the Terminal version is processing a file, it displays a yellow attention option:
+
+[S] Stop transcription safely
+
+For a batch, it displays:
+
+[S] Stop transcription safely and cancel the remaining batch
+
+Press S to request a safe Stop.
+
+MediaScribe displays a confirmation:
+
+[Y] Yes, stop
+[N] No, keep running
+Default: No, keep running
+
+Press Y to stop.
+
+Press N or Enter to continue processing.
+
+A confirmed Stop remains a stopped operation even when FFmpeg or Whisper happens to finish while the confirmation is being answered.
+
+In single-file mode:
+
+The active original remains unchanged.
+The incomplete folder becomes ABORTED_.
+The Terminal returns to the Next Step menu.
+
+In batch mode:
+
+Completed files remain completed.
+The active file becomes stopped.
+The active original remains unchanged.
+The active incomplete folder becomes ABORTED_.
+Remaining files do not start.
+The final summary reports Completed, Failed, Stopped, and Not started.
+
+Use the controlled S option instead of Ctrl+C whenever possible.
+
+============================================================
+18. TERMINAL COLORS AND EXIT CODES
+============================================================
+
+The Terminal interface uses colors to communicate status:
+
+Green:
+[OK]
+Successful file or completed count
+
+Yellow:
+[WARN]
+[STOPPED]
+[NOT STARTED]
+Attention, warning, stopped, or unstarted work
+
+Red:
+[ERROR]
+[FAILED]
+Actual processing failure
+
+General information uses the normal console color.
+
+Exit codes:
+
+0 = completed successfully
+1 = completed with one or more errors
+2 = stopped by the user
+
+In a stopped batch, exit code 2 takes priority even when an earlier file failed.
+
+============================================================
+19. AFTER PROCESSING
+============================================================
+
+After processing, the Terminal version asks:
 
 [R] Run again / return to file list
 [O] Open output folder
@@ -730,11 +769,19 @@ After processing finishes, MediaScribe may ask what to do next.
 
 Pressing Enter quits.
 
+The GUI refreshes the current Source list after a single job or batch.
+
+Files successfully moved from Input disappear from the list.
+
+Failed, stopped, and unstarted Input-folder files remain listed because they remain in Input.
+
+External source files remain listed because their originals stay in the external Source folder.
+
 ============================================================
-18. COMMON FAMILY HISTORY USES
+20. COMMON FAMILY HISTORY WORKFLOWS
 ============================================================
 
-MediaScribe can help create searchable written transcripts from digitized family media, such as:
+MediaScribe can create searchable transcripts from:
 
 Family interviews
 Home movie narration
@@ -751,64 +798,92 @@ Meetings
 Dictation
 Other spoken recordings
 
-A common single-file workflow is:
+A common single-file workflow:
 
-1. Digitize the tape, film, or recording into a video/audio file
+1. Digitize the tape, film, or recording
 2. Open MediaScribe GUI
-3. Choose the folder that contains the digitized file
+3. Choose the Source folder
 4. Choose Selected file
-5. Choose the file
-6. Choose the language spoken in the recording
-7. Choose whether to keep the original-language transcript or translate to English
+5. Select the file
+6. Choose Input Audio
+7. Choose Output Text
 8. Start transcription
-9. Save or share the TXT transcript
+9. Review and share the TXT transcript
 
-A common multiple-file workflow is:
+A common mixed-language batch workflow:
 
-1. Place several digitized recordings into one folder
+1. Put several recordings into one folder
 2. Open MediaScribe GUI
-3. Select that Source folder
+3. Choose that Source folder
 4. Choose All files in source folder
-5. Choose Auto-detect when the files may contain different languages
-6. Choose whether to keep each detected language or translate all output to English
-7. Start transcription
-8. Review the separate output folder created for every file
+5. Choose Input Audio: Auto-detect
+6. Choose Same as input / detected or English translation
+7. Start Batch Transcription
+8. Review each separate output folder
 9. Review the final batch summary
 
 ============================================================
-19. NOTES
+21. TROUBLESHOOTING
 ============================================================
 
-DRM/protected media may fail.
+A second GUI will not open:
 
-Damaged media files may fail.
+This is intentional. Check the taskbar for the already-open MediaScribe window.
 
-Audio is extracted only and converted to mono 16 kHz WAV for consistency.
+No live preview appears:
+
+Live preview is intentionally hidden for Auto-detect, non-English input, and English translation. The final transcript is still created.
+
+Preview appears in groups:
+
+Whisper normally releases progress in approximately 30-second audio chunks.
+
+FFmpeg shows decoder warnings but processing completes:
+
+The source may contain unusual or damaged frames that FFmpeg recovered from. Review the resulting WAV and transcript.
+
+A file fails immediately:
+
+The file may be damaged, unsupported, DRM-protected, or may have the wrong extension. The original remains in place.
+
+An empty output folder disappears after failure:
+
+This is intentional. MediaScribe removes only a truly empty failed folder.
+
+An ABORTED_ folder remains:
+
+This records incomplete work from a confirmed Stop. Review or delete it when appropriate.
+
+MediaScribe says a dependency is missing:
+
+Repair Python, pip, Whisper, or FFmpeg, then run Install.bat again.
+
+============================================================
+22. NOTES
+============================================================
 
 Default mode is recommended for most users.
 
-Full mode is useful for caption/subtitle workflows.
+Full mode is useful for caption and subtitle workflows.
 
 Input Audio means the language spoken in the recording.
 
-Output Text controls whether the final text is in the original/detected language or translated to English.
+Output Text controls whether final text stays in the original/detected language or is translated to English.
 
-The same settings are applied to every file in a multiple-file batch.
+Multiple-file processing is sequential, not parallel.
 
-Use Auto-detect for a mixed-language folder.
+Use Auto-detect for mixed-language batches.
 
-Multiple-file mode processes files one at a time and creates a separate output folder for each file.
+English live preview appears in approximately 30-second chunks.
 
-Stop Transcription safely cancels the active GUI operation.
+Stop safely cancels the active process tree.
 
-In batch mode, Stop cancels the active file and all files that have not yet started.
+Completed batch files remain completed.
 
-Completed files remain completed.
+Failed, stopped, and unstarted originals remain in place.
 
-The active original media remains unchanged.
+ABORTED_ folders identify incomplete user-stopped jobs.
 
-ABORTED_ folders contain incomplete work and may be reviewed or deleted.
+Install.bat is used to install, reinstall, or repair MediaScribe.
 
-Install.bat is only used to install, reinstall, or repair MediaScribe.
-
-After installation, use the GUI launcher or MediaScribe.bat from the installed MediaScribe folder.
+After installation, use the GUI launcher or Terminal launcher from the installed MediaScribe folder.
