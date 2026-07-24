@@ -212,11 +212,13 @@ function Update-FileList {
     $sourceFolderTextBox.Text = $FolderPath
 
     $fileCombo.Items.Clear()
-    $mediaFiles = Get-MediaFilesFromFolder -FolderPath $FolderPath
+    $mediaFiles = @(Get-MediaFilesFromFolder -FolderPath $FolderPath)
 
     foreach ($mediaFile in $mediaFiles) {
         [void]$fileCombo.Items.Add($mediaFile.Name)
     }
+
+    $allFilesRadioButton.Text = "All recognized files in source folder ($($mediaFiles.Count))"
 
     if ($fileCombo.Items.Count -gt 0) {
         $fileCombo.SelectedIndex = 0
@@ -224,6 +226,8 @@ function Update-FileList {
     } else {
         $statusLabel.Text = "Status: No recognized media files found"
     }
+
+    Update-FileSelectionMode
 }
 
 function Get-SelectedMediaFile {
@@ -236,6 +240,22 @@ function Get-SelectedMediaFile {
     }
 
     return Join-Path $script:SourceFolder $fileCombo.SelectedItem.ToString()
+}
+
+function Update-FileSelectionMode {
+    $batchModeSelected = $allFilesRadioButton.Checked
+
+    if (-not $script:IsRunning) {
+        $fileCombo.Enabled = -not $batchModeSelected
+    } else {
+        $fileCombo.Enabled = $false
+    }
+
+    if ($batchModeSelected) {
+        $startButton.Text = "Start Batch Transcription"
+    } else {
+        $startButton.Text = "Start Transcription"
+    }
 }
 
 function Add-Status {
@@ -253,9 +273,13 @@ function Add-Status {
 function Set-RunningState {
     param([bool]$IsRunning)
 
+    $script:IsRunning = $IsRunning
+
     $browseFolderButton.Enabled = -not $IsRunning
     $refreshFilesButton.Enabled = -not $IsRunning
-    $fileCombo.Enabled = -not $IsRunning
+    $selectedFileRadioButton.Enabled = -not $IsRunning
+    $allFilesRadioButton.Enabled = -not $IsRunning
+    $fileCombo.Enabled = $false
     $startButton.Enabled = -not $IsRunning
     $outputModeCombo.Enabled = -not $IsRunning
     $modelCombo.Enabled = -not $IsRunning
@@ -268,6 +292,7 @@ function Set-RunningState {
     if ($IsRunning) {
         $statusLabel.Text = "Status: Running"
     } else {
+        Update-FileSelectionMode
         $statusLabel.Text = "Status: Ready"
     }
 }
@@ -363,11 +388,26 @@ $refreshFilesButton.Size = New-Object System.Drawing.Size(115, 32)
 $filesGroup.Controls.Add($refreshFilesButton)
 
 $fileLabel = New-Object System.Windows.Forms.Label
-$fileLabel.Text = "Selected file:"
+$fileLabel.Text = "Transcribe:"
 $fileLabel.Font = $fontSection
 $fileLabel.Location = New-Object System.Drawing.Point(15, 92)
-$fileLabel.Size = New-Object System.Drawing.Size(160, 25)
+$fileLabel.Size = New-Object System.Drawing.Size(100, 25)
 $filesGroup.Controls.Add($fileLabel)
+
+$selectedFileRadioButton = New-Object System.Windows.Forms.RadioButton
+$selectedFileRadioButton.Text = "Selected file"
+$selectedFileRadioButton.Font = $fontMain
+$selectedFileRadioButton.Location = New-Object System.Drawing.Point(120, 90)
+$selectedFileRadioButton.Size = New-Object System.Drawing.Size(135, 27)
+$selectedFileRadioButton.Checked = $true
+$filesGroup.Controls.Add($selectedFileRadioButton)
+
+$allFilesRadioButton = New-Object System.Windows.Forms.RadioButton
+$allFilesRadioButton.Text = "All recognized files in source folder (0)"
+$allFilesRadioButton.Font = $fontMain
+$allFilesRadioButton.Location = New-Object System.Drawing.Point(265, 90)
+$allFilesRadioButton.Size = New-Object System.Drawing.Size(390, 27)
+$filesGroup.Controls.Add($allFilesRadioButton)
 
 $fileCombo = New-Object System.Windows.Forms.ComboBox
 $fileCombo.Font = $fontMain
@@ -556,6 +596,15 @@ foreach ($label in @(
     $label.ForeColor = $colorPrimaryText
 }
 
+# File-mode choices
+foreach ($radioButton in @(
+    $selectedFileRadioButton,
+    $allFilesRadioButton
+)) {
+    $radioButton.BackColor = $colorPanelBackground
+    $radioButton.ForeColor = $colorPrimaryText
+}
+
 # Keep the current status emphasized with the accent color
 $statusLabel.ForeColor = $colorGroupText
 
@@ -609,6 +658,7 @@ $startButton.FlatAppearance.MouseDownBackColor = $colorStartGreenDown
 # Events
 # -----------------------------
 
+$script:IsRunning = $false
 $script:RunningProcess = $null
 $script:CurrentLogFile = $null
 $script:LastLogLength = 0
@@ -689,6 +739,14 @@ $logTimer.Add_Tick({
 }
 })
 
+$selectedFileRadioButton.Add_CheckedChanged({
+    Update-FileSelectionMode
+})
+
+$allFilesRadioButton.Add_CheckedChanged({
+    Update-FileSelectionMode
+})
+
 $browseFolderButton.Add_Click({
     $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
     $dialog.Description = "Choose a folder that contains audio or video files"
@@ -735,16 +793,46 @@ $startButton.Add_Click({
         return
     }
 
-    $selectedFile = Get-SelectedMediaFile
+    $batchMode = $allFilesRadioButton.Checked
+    $selectedFile = $null
+    $batchFiles = @()
 
-    if ([string]::IsNullOrWhiteSpace($selectedFile) -or -not (Test-Path -LiteralPath $selectedFile)) {
-        [System.Windows.Forms.MessageBox]::Show(
-            "Choose a valid audio or video file from the list first.",
-            "MediaScribe",
-            [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Warning
-        ) | Out-Null
-        return
+    if ($batchMode) {
+        if ([string]::IsNullOrWhiteSpace($script:SourceFolder) -or
+            -not (Test-Path -LiteralPath $script:SourceFolder -PathType Container)) {
+            [System.Windows.Forms.MessageBox]::Show(
+                "Choose a valid source folder first.",
+                "MediaScribe",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Warning
+            ) | Out-Null
+            return
+        }
+
+        $batchFiles = @(Get-MediaFilesFromFolder -FolderPath $script:SourceFolder)
+
+        if ($batchFiles.Count -eq 0) {
+            [System.Windows.Forms.MessageBox]::Show(
+                "No recognized audio or video files were found in the source folder.",
+                "MediaScribe",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Warning
+            ) | Out-Null
+            return
+        }
+    } else {
+        $selectedFile = Get-SelectedMediaFile
+
+        if ([string]::IsNullOrWhiteSpace($selectedFile) -or
+            -not (Test-Path -LiteralPath $selectedFile -PathType Leaf)) {
+            [System.Windows.Forms.MessageBox]::Show(
+                "Choose a valid audio or video file from the list first.",
+                "MediaScribe",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Warning
+            ) | Out-Null
+            return
+        }
     }
 
     $selectedOutputMode = if ($outputModeCombo.SelectedIndex -eq 1) { "full" } else { "default" }
@@ -777,8 +865,16 @@ $startButton.Add_Click({
     }
 
     $statusBox.Clear()
-    Add-Status "MediaScribe GUI started."
-    Add-Status "Selected file: $selectedFile"
+
+    if ($batchMode) {
+        Add-Status "MediaScribe GUI batch transcription started."
+        Add-Status "Batch source path: $($script:SourceFolder)"
+        Add-Status "Recognized files: $($batchFiles.Count)"
+    } else {
+        Add-Status "MediaScribe GUI started."
+        Add-Status "Selected file: $selectedFile"
+    }
+
     Add-Status "Output mode: $selectedOutputMode"
     Add-Status "Whisper model: $selectedModel"
     Add-Status "Input audio: $selectedLanguageName"
@@ -794,16 +890,28 @@ $startButton.Add_Click({
     $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
     [System.IO.File]::WriteAllText($script:CurrentLogFile, "", $utf8NoBom)
 
+    $sourceArguments = if ($batchMode) {
+        @(
+            "-BatchSourcePath", "`"$($script:SourceFolder)`""
+        )
+    } else {
+        @(
+            "-InputFile", "`"$selectedFile`""
+        )
+    }
+
     $arguments = @(
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
-        "-File", "`"$TranscribeScript`"",
-        "-InputFile", "`"$selectedFile`"",
+        "-File", "`"$TranscribeScript`""
+    ) + $sourceArguments + @(
         "-OutputMode", $selectedOutputMode,
         "-Model", $selectedModel,
         "-Language", $selectedLanguage,
         "-Task", $selectedTask
-    ) -join " "
+    )
+
+    $arguments = $arguments -join " "
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = "powershell.exe"

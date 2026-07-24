@@ -5,6 +5,7 @@
 
 param(
     [string]$InputFile,
+    [string]$BatchSourcePath,
     [string]$OutputFolder,
     [string]$Model,
     [string]$Language,
@@ -304,7 +305,14 @@ if (-not [string]::IsNullOrWhiteSpace($OutputMode)) {
 $NormalizedOutputMode = Resolve-OutputMode -Mode $DefaultOutputMode
 $WhisperTask = Resolve-WhisperTask -TaskValue $Task
 
-$ParameterMode = -not [string]::IsNullOrWhiteSpace($InputFile)
+$SingleFileParameterMode = -not [string]::IsNullOrWhiteSpace($InputFile)
+$BatchParameterMode = -not [string]::IsNullOrWhiteSpace($BatchSourcePath)
+$ParameterMode = $SingleFileParameterMode -or $BatchParameterMode
+
+if ($SingleFileParameterMode -and $BatchParameterMode) {
+  Write-Host "Specify either -InputFile or -BatchSourcePath, not both." -ForegroundColor Red
+  exit 1
+}
 
 foreach ($folder in @($InputDir, $OutputDir, $LogsDir, $ModelsDir)) {
   if (-not (Test-Path -LiteralPath $folder)) {
@@ -824,7 +832,7 @@ function Invoke-TranscriptionFile {
   }
 }
 
-if ($ParameterMode) {
+if ($SingleFileParameterMode) {
   if (-not (Test-Path -LiteralPath $InputFile)) {
     Write-Host "Input file was not found:"
     Write-Host "  $InputFile"
@@ -842,6 +850,106 @@ if ($ParameterMode) {
     -OpenFolderWhenDone:$false
 
   exit $result.ExitCode
+}
+
+if ($BatchParameterMode) {
+  if (-not (Test-Path -LiteralPath $BatchSourcePath -PathType Container)) {
+    Write-ErrorMessage "Batch source path was not found or is not a folder:"
+    Write-Host "  $BatchSourcePath"
+    exit 1
+  }
+
+  try {
+    $resolvedBatchSourcePath = (Resolve-Path -LiteralPath $BatchSourcePath).ProviderPath
+    $selectedFiles = @(
+      Get-ChildItem -LiteralPath $resolvedBatchSourcePath -File -ErrorAction Stop |
+        Where-Object { $_.Extension -match $ExtPattern } |
+        Sort-Object Name
+    )
+  } catch {
+    Write-ErrorMessage "The batch source path could not be read."
+    Write-ErrorMessage $_.Exception.Message
+    exit 1
+  }
+
+  if ($selectedFiles.Count -eq 0) {
+    Write-ErrorMessage "No recognized media files were found in the batch source path:"
+    Write-Host "  $resolvedBatchSourcePath"
+    Write-Host ""
+    Write-Info "Recognized formats:"
+    Write-Host "  mp4 mkv mov m4v avi webm | mp3 m4a wav aac flac ogg opus wma"
+    exit 1
+  }
+
+  $SelectedOutputMode = $NormalizedOutputMode
+
+  Write-Section "Batch Settings"
+  Write-Info "Batch source path: $resolvedBatchSourcePath"
+  Write-Info "Recognized files: $($selectedFiles.Count)"
+  Write-Info "Output mode: $SelectedOutputMode"
+  Write-Info "Whisper model: $DefaultModel"
+
+  if ($DefaultLanguage -eq "auto") {
+    Write-Info "Language: Auto-detect"
+  } else {
+    Write-Info "Language: $DefaultLanguage"
+  }
+
+  if ($WhisperTask -eq "translate") {
+    Write-Info "Output text: English translation"
+  } else {
+    Write-Info "Output text: Same as input / detected"
+  }
+
+  $results = @()
+
+  for ($i = 0; $i -lt $selectedFiles.Count; $i++) {
+    $currentFile = $selectedFiles[$i]
+
+    Write-Section "Batch Item $($i + 1) of $($selectedFiles.Count)"
+    Write-Info "File: $($currentFile.Name)"
+
+    $result = Invoke-TranscriptionFile `
+      -SelectedInputFile $currentFile `
+      -SelectedOutputMode $SelectedOutputMode `
+      -WhisperModel $DefaultModel `
+      -WhisperLanguage $DefaultLanguage `
+      -WhisperTask $WhisperTask `
+      -OpenFolderWhenDone:$false
+
+    $results += $result
+  }
+
+  Write-Section "Batch Summary"
+
+  foreach ($result in $results) {
+    if ($result.Success) {
+      Write-Ok "$($result.FileName)"
+    } else {
+      Write-Warn "$($result.FileName) - $($result.Message)"
+    }
+  }
+
+  $successCount = @($results | Where-Object { $_.Success }).Count
+  $failureCount = $results.Count - $successCount
+
+  Write-Host ""
+  Write-Info "Successful: $successCount"
+
+  if ($failureCount -gt 0) {
+    Write-Warn "Failed: $failureCount"
+  } else {
+    Write-Info "Failed: 0"
+  }
+
+  Write-Host "Output folder:"
+  Write-Host "  $OutputDir"
+
+  if ($failureCount -gt 0) {
+    exit 1
+  }
+
+  exit 0
 }
 
 :InteractiveLoop do {
